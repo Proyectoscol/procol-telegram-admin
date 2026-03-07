@@ -139,7 +139,7 @@ const INACTIVE_EXPORT_COLUMNS: ExportColumn[] = [
 function formatPeriod(period: string | null): string {
   if (!period) return '';
   const d = new Date(period);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit', timeZone: 'UTC' });
 }
 
 /** Compute period start (inclusive) and end (exclusive) as ISO strings for the API */
@@ -640,8 +640,20 @@ export function Dashboard() {
             })}
           </div>
           {quickRange === 'custom' && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8125rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: '0.5rem 0.75rem',
+                marginTop: '0.5rem',
+                padding: '0.5rem 0.6rem',
+                background: 'rgba(0,0,0,0.04)',
+                borderRadius: '6px',
+                border: '1px solid rgba(0,0,0,0.08)',
+              }}
+            >
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8125rem', fontWeight: 500 }}>
                 From
                 <input
                   type="date"
@@ -650,10 +662,10 @@ export function Dashboard() {
                     setQuickRange('custom');
                     setCustomStartDate(e.target.value || '');
                   }}
-                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                  style={{ padding: '0.35rem 0.5rem', fontSize: '0.8125rem', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '4px', minWidth: '8.5rem' }}
                 />
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8125rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8125rem', fontWeight: 500 }}>
                 To
                 <input
                   type="date"
@@ -662,9 +674,12 @@ export function Dashboard() {
                     setQuickRange('custom');
                     setCustomEndDate(e.target.value || '');
                   }}
-                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                  style={{ padding: '0.35rem 0.5rem', fontSize: '0.8125rem', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '4px', minWidth: '8.5rem' }}
                 />
               </label>
+              {(!customStartDate || !customEndDate) && (
+                <span style={{ fontSize: '0.75rem', color: '#8b98a5' }}>Select both dates to apply range (no button needed)</span>
+              )}
               {customStartDate && customEndDate && customStartDate > customEndDate && (
                 <span style={{ fontSize: '0.75rem', color: '#e74c3c' }}>From must be before To</span>
               )}
