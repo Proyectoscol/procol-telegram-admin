@@ -161,6 +161,7 @@ interface RelationshipInsight {
   prompt_tokens?: number | null;
   completion_tokens?: number | null;
   run_at?: string | null;
+  generated_for_range?: string | null;
 }
 
 export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserProfileProps) {
