@@ -68,7 +68,7 @@ interface PeriodReactionsDetail {
   }[];
 }
 
-type QuickRange = 'all' | '1w' | '1m' | '3m' | '6m' | '1y' | '2y';
+type QuickRange = 'all' | '1w' | '1m' | '3m' | '6m' | '1y' | '2y' | 'custom';
 
 const QUICK_RANGE_OPTIONS: Array<{ value: QuickRange; label: string }> = [
   { value: '1w', label: 'Week' },
@@ -78,6 +78,7 @@ const QUICK_RANGE_OPTIONS: Array<{ value: QuickRange; label: string }> = [
   { value: '1y', label: '1 year' },
   { value: '2y', label: '2 years' },
   { value: 'all', label: 'Indefinitely' },
+  { value: 'custom', label: 'Custom' },
 ];
 
 const ACTIVITY_EXPORT_COLUMNS: ExportColumn[] = [
@@ -156,7 +157,7 @@ function periodBounds(period: string, groupBy: 'day' | 'week' | 'month'): { star
 }
 
 function quickRangeBounds(range: QuickRange): { start: string | null; end: string | null } {
-  if (range === 'all') return { start: null, end: null };
+  if (range === 'all' || range === 'custom') return { start: null, end: null };
   const now = new Date();
   const start = new Date(now);
   if (range === '1w') {
@@ -181,6 +182,8 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'day' | 'week' | 'month'>('day');
   const [quickRange, setQuickRange] = useState<QuickRange>('3m');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
   const [selectedChatIds, setSelectedChatIds] = useState<number[]>([]);
   const [fromId, setFromId] = useState<string>('');
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
@@ -257,7 +260,14 @@ export function Dashboard() {
   const [moreInactivePage, setMoreInactivePage] = useState(1);
   const [moreInactiveSortBy, setMoreInactiveSortBy] = useState<InactiveSortKey>('display_name');
   const [moreInactiveSortDir, setMoreInactiveSortDir] = useState<'asc' | 'desc'>('asc');
-  const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
+  const range = useMemo((): { start: string | null; end: string | null } => {
+    if (quickRange !== 'custom') return quickRangeBounds(quickRange);
+    if (!customStartDate || !customEndDate || customStartDate > customEndDate) return { start: null, end: null };
+    const startISO = `${customStartDate}T00:00:00.000Z`;
+    const endDate = new Date(`${customEndDate}T00:00:00.000Z`);
+    endDate.setUTCDate(endDate.getUTCDate() + 1);
+    return { start: startISO, end: endDate.toISOString() };
+  }, [quickRange, customStartDate, customEndDate]);
   const start = range.start;
   const end = range.end;
 
@@ -629,6 +639,37 @@ export function Dashboard() {
               );
             })}
           </div>
+          {quickRange === 'custom' && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8125rem' }}>
+                From
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => {
+                    setQuickRange('custom');
+                    setCustomStartDate(e.target.value || '');
+                  }}
+                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                />
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8125rem' }}>
+                To
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => {
+                    setQuickRange('custom');
+                    setCustomEndDate(e.target.value || '');
+                  }}
+                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                />
+              </label>
+              {customStartDate && customEndDate && customStartDate > customEndDate && (
+                <span style={{ fontSize: '0.75rem', color: '#e74c3c' }}>From must be before To</span>
+              )}
+            </div>
+          )}
         </div>
         {chats.length > 0 && (
           <ChatSelector
@@ -656,13 +697,15 @@ export function Dashboard() {
             Go to contact
           </a>
         ) : null}
-        {(groupBy !== 'day' || quickRange !== '3m' || fromId !== '' || selectedChatIds.length !== chats.length || chats.some((c) => !selectedChatIds.includes(c.id))) && (
+        {(groupBy !== 'day' || quickRange !== '3m' || customStartDate !== '' || customEndDate !== '' || fromId !== '' || selectedChatIds.length !== chats.length || chats.some((c) => !selectedChatIds.includes(c.id))) && (
           <button
             type="button"
             className="btn btn-secondary"
             onClick={() => {
               setGroupBy('day');
               setQuickRange('3m');
+              setCustomStartDate('');
+              setCustomEndDate('');
               setSelectedChatIds(chats.map((c) => c.id));
               setFromId('');
             }}
