@@ -208,6 +208,7 @@ const EXPECTED_TABLES = [
   'contact_personas',
   'ai_usage_logs',
   'day_insights',
+  'relationship_insights',
 ] as const;
 
 export async function validateSchema(): Promise<string[]> {

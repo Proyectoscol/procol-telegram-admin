@@ -233,3 +233,22 @@ CREATE TABLE IF NOT EXISTS day_insights (
   UNIQUE(period_start, chat_ids_canonical, scope, from_id)
 );
 CREATE INDEX IF NOT EXISTS idx_day_insights_lookup ON day_insights(period_start, chat_ids_canonical, scope, from_id);
+
+-- Relationship insight: AI summary of interactions between two members (reactions, replies). One row per (user, other_user); overwritten on each run.
+CREATE TABLE IF NOT EXISTS relationship_insights (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  other_user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  summary TEXT,
+  tone TEXT,
+  mutual_or_one_sided TEXT,
+  evolution TEXT,
+  inference_evidence TEXT,
+  model_used TEXT,
+  prompt_tokens INT,
+  completion_tokens INT,
+  run_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, other_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_relationship_insights_user ON relationship_insights(user_id);
+CREATE INDEX IF NOT EXISTS idx_relationship_insights_other ON relationship_insights(other_user_id);

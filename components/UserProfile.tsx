@@ -140,6 +140,28 @@ interface Persona {
   run_at: string | null;
 }
 
+interface TopRelationship {
+  otherFromId: string;
+  otherDisplayName: string;
+  reactionsToThem: number;
+  repliesToThem: number;
+  reactionsFromThem: number;
+  repliesFromThem: number;
+  totalScore: number;
+}
+
+interface RelationshipInsight {
+  summary: string | null;
+  tone: string | null;
+  mutual_or_one_sided: string | null;
+  evolution: string | null;
+  inference_evidence: string | null;
+  model_used?: string | null;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  run_at?: string | null;
+}
+
 export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserProfileProps) {
   const [user, setUser] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -192,6 +214,12 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
   // Seeded from /full response so ReactionsGivenList and UserMessagesList don't fetch separately
   const [_recentMsgs, _setRecentMsgs] = useState<{ chat_id?: number; chat_name?: string | null; chat_slug?: string | null; date: string; text: string | null; [k: string]: unknown }[] | null>(null);
   const [_reactionsGiven, _setReactionsGiven] = useState<{ chatId: number; chatName: string | null; chatSlug: string | null; receiverFromId: string; receiverName: string | null; count: number }[] | null>(null);
+  const [topRelationships, setTopRelationships] = useState<TopRelationship[]>([]);
+  const [topRelationshipsLoading, setTopRelationshipsLoading] = useState(false);
+  const [relationshipInsightByKey, setRelationshipInsightByKey] = useState<Record<string, RelationshipInsight | null>>({});
+  const [relationshipLoadingByKey, setRelationshipLoadingByKey] = useState<Record<string, boolean>>({});
+  const [relationshipGeneratingByKey, setRelationshipGeneratingByKey] = useState<Record<string, boolean>>({});
+  const [relationshipErrorByKey, setRelationshipErrorByKey] = useState<Record<string, string | null>>({});
 
   const fromId = fromIdProp ?? (user?.from_id ?? null);
   const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
@@ -380,6 +408,61 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       .finally(() => setPersonaLoading(false));
     return () => controller.abort();
   }, [user?.id, byId, fromId]);
+
+  // Top 3 relationships (same chat filter as profile)
+  useEffect(() => {
+    if (!fromId) {
+      setTopRelationships([]);
+      return;
+    }
+    const controller = new AbortController();
+    setTopRelationshipsLoading(true);
+    const params = new URLSearchParams();
+    profileChatIds.forEach((id) => params.append('chatId', String(id)));
+    fetch(`/api/users/${encodeURIComponent(fromId)}/top-relationships?${params}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : { topRelationships: [] }))
+      .then((data) => setTopRelationships(Array.isArray(data.topRelationships) ? data.topRelationships : []))
+      .catch(() => setTopRelationships([]))
+      .finally(() => setTopRelationshipsLoading(false));
+    return () => controller.abort();
+  }, [fromId, profileChatIds]);
+
+  // Preload stored relationship insights for top 3
+  useEffect(() => {
+    if (!fromId || topRelationships.length === 0) return;
+    topRelationships.forEach((rel) => {
+      const key = rel.otherFromId;
+      setRelationshipLoadingByKey((prev) => ({ ...prev, [key]: true }));
+      setRelationshipErrorByKey((prev) => ({ ...prev, [key]: null }));
+      fetch(`/api/users/${encodeURIComponent(fromId)}/relationship-summary?otherFromId=${encodeURIComponent(key)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          setRelationshipInsightByKey((prev) => ({ ...prev, [key]: data ?? null }));
+        })
+        .catch(() => setRelationshipInsightByKey((prev) => ({ ...prev, [key]: null })))
+        .finally(() => setRelationshipLoadingByKey((prev) => ({ ...prev, [key]: false })));
+    });
+  }, [fromId, topRelationships]);
+
+  const handleGenerateRelationshipSummary = async (otherFromId: string) => {
+    if (!fromId) return;
+    setRelationshipGeneratingByKey((prev) => ({ ...prev, [otherFromId]: true }));
+    setRelationshipErrorByKey((prev) => ({ ...prev, [otherFromId]: null }));
+    try {
+      const res = await fetch(`/api/users/${encodeURIComponent(fromId)}/relationship-summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otherFromId, chatIds: profileChatIds.length > 0 ? profileChatIds : undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate');
+      setRelationshipInsightByKey((prev) => ({ ...prev, [otherFromId]: data.insight ?? null }));
+    } catch (e) {
+      setRelationshipErrorByKey((prev) => ({ ...prev, [otherFromId]: e instanceof Error ? e.message : 'Failed' }));
+    } finally {
+      setRelationshipGeneratingByKey((prev) => ({ ...prev, [otherFromId]: false }));
+    }
+  };
 
   const handlePatch = async (updates: { is_premium?: boolean; assigned_to?: string; notes?: string }) => {
     if (!user) return;
@@ -765,6 +848,77 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
           </>
         )}
       </div>
+
+      {fromId && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Top 3 relationships</h2>
+          {topRelationshipsLoading && topRelationships.length === 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
+              <LoadingSpinner size="sm" />
+              <span>Loading…</span>
+            </div>
+          )}
+          {!topRelationshipsLoading && topRelationships.length === 0 && (
+            <p style={{ color: '#8b98a5', margin: 0 }}>No interactions with other members in the selected chats/range.</p>
+          )}
+          {topRelationships.map((rel, idx) => {
+            const insight = relationshipInsightByKey[rel.otherFromId];
+            const loading = relationshipLoadingByKey[rel.otherFromId];
+            const generating = relationshipGeneratingByKey[rel.otherFromId];
+            const relError = relationshipErrorByKey[rel.otherFromId];
+            const isLast = idx === topRelationships.length - 1;
+            return (
+              <div key={rel.otherFromId} style={{ marginBottom: isLast ? 0 : '1.25rem', paddingBottom: isLast ? 0 : '1.25rem', borderBottom: isLast ? 'none' : '1px solid #2f3336' }}>
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <a href={`/users/${encodeURIComponent(rel.otherFromId)}`} style={{ fontWeight: 600 }}>
+                    {rel.otherDisplayName}
+                  </a>
+                  <span style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>
+                    {rel.reactionsToThem + rel.repliesToThem} from you → them · {rel.reactionsFromThem + rel.repliesFromThem} from them → you
+                  </span>
+                </div>
+                {relError && <p style={{ color: '#f91854', fontSize: '0.875rem', margin: '0.25rem 0 0.5rem' }}>{relError}</p>}
+                {loading && !insight && <p style={{ color: '#8b98a5', fontSize: '0.875rem', margin: 0 }}>Loading summary…</p>}
+                {!insight && !loading && (
+                  <button type="button" className="btn btn-primary" style={{ fontSize: '0.8125rem' }} onClick={() => handleGenerateRelationshipSummary(rel.otherFromId)} disabled={generating}>
+                    {generating ? 'Generating…' : 'Generate relationship summary'}
+                  </button>
+                )}
+                {insight && (
+                  <>
+                    {insight.summary && (
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Summary</span>
+                        <p style={{ margin: '0.35rem 0 0', lineHeight: 1.5 }}>{insight.summary}</p>
+                      </div>
+                    )}
+                    {(insight.tone || insight.mutual_or_one_sided || insight.evolution) && (
+                      <div style={{ marginBottom: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', fontSize: '0.875rem' }}>
+                        {insight.tone && <span><strong>Tone:</strong> {insight.tone}</span>}
+                        {insight.mutual_or_one_sided && <span><strong>Balance:</strong> {insight.mutual_or_one_sided}</span>}
+                        {insight.evolution && <span><strong>Evolution:</strong> {insight.evolution}</span>}
+                      </div>
+                    )}
+                    {insight.inference_evidence && (
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Evidence</span>
+                        <div style={{ margin: '0.35rem 0 0', lineHeight: 1.6, whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>{insight.inference_evidence}</div>
+                      </div>
+                    )}
+                    <p style={{ color: '#8b98a5', fontSize: '0.75rem', marginTop: '0.5rem', marginBottom: 0 }}>
+                      {insight.run_at ? `Generated ${formatDate(insight.run_at)}` : ''}
+                      {insight.model_used && ` · ${insight.model_used}`}
+                    </p>
+                    <button type="button" className="btn btn-secondary" style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }} onClick={() => handleGenerateRelationshipSummary(rel.otherFromId)} disabled={generating}>
+                      {generating ? 'Regenerating…' : 'Regenerate summary'}
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="stats-row">
         <div className="kpi-card">

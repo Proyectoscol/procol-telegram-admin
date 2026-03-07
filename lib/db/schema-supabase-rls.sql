@@ -42,3 +42,6 @@ CREATE POLICY "allow_authenticated_ai_usage_logs" ON ai_usage_logs FOR ALL TO au
 ALTER TABLE day_insights ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "allow_authenticated_day_insights" ON day_insights;
 CREATE POLICY "allow_authenticated_day_insights" ON day_insights FOR ALL TO authenticated USING (true) WITH CHECK (true);
+ALTER TABLE relationship_insights ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow_authenticated_relationship_insights" ON relationship_insights;
+CREATE POLICY "allow_authenticated_relationship_insights" ON relationship_insights FOR ALL TO authenticated USING (true) WITH CHECK (true);
