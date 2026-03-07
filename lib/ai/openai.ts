@@ -167,28 +167,29 @@ export interface RelationshipSummaryResult {
   usage: { model: string; prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }
 
-const RELATIONSHIP_SYSTEM_PROMPT = `You are an analyst for a community. Given two members (A and B) and their interactions — messages where they reply to each other, and reactions they give to each other's messages — produce a short relationship summary.
+const RELATIONSHIP_SYSTEM_PROMPT = `You are an analyst for a community. You will be given two members and their interactions — messages where they reply to each other, and reactions they give to each other's messages — and must produce a short relationship summary.
 
+- Always refer to the two members by their real names (as provided in the prompt). Do not use "A", "B", "Member A", or "Member B" in your summary, tone, evolution, or inference_evidence.
 - Focus on: what they tend to engage on (topics), the tone of their exchanges, whether the engagement is mutual or one-sided, and how it has evolved over time.
-- Be specific and evidence-based. For each claim, reference the exact message or reaction (quote or describe) that supports it.
-- The inference_evidence field is required: 2–4 bullet points that cite specific messages or reactions (dates, quotes) as proof.`;
+- Be specific and evidence-based. For each claim, reference the exact message or reaction (quote or describe) that supports it, using the members' real names.
+- The inference_evidence field is required: 2–4 bullet points that cite specific messages or reactions (dates, quotes) as proof, using the members' real names.`;
 
-const RELATIONSHIP_USER_PROMPT_TEMPLATE = `Member A: {{memberAName}}
-Member B: {{memberBName}}
+const RELATIONSHIP_USER_PROMPT_TEMPLATE = `Member 1: {{memberAName}}
+Member 2: {{memberBName}}
 
-## Messages between them (chronological; A/B = author; [REPLY TO X: "…"] = reply context)
+## Messages between them (chronological; [REPLY TO X: "…"] = reply context)
 {{messagesBetweenBlob}}
 
-## Reactions A gave to B's messages
+## Reactions {{memberAName}} gave to {{memberBName}}'s messages
 {{reactionsAtoBBlob}}
 
-## Reactions B gave to A's messages
+## Reactions {{memberBName}} gave to {{memberAName}}'s messages
 {{reactionsBtoABlob}}
 
 ## Reply pairs (who replied to whom and to what)
 {{repliesBlob}}
 
-Produce the JSON relationship summary: summary, tone, mutual_or_one_sided, evolution, inference_evidence. Include inference_evidence with explicit references to the messages or reactions above.`;
+Produce the JSON relationship summary: summary, tone, mutual_or_one_sided, evolution, inference_evidence. Use the members' real names ({{memberAName}} and {{memberBName}}) throughout your summary and evidence — never use "A" or "B".`;
 
 export async function generateRelationshipSummary(context: import('@/lib/ai/relationship-context').RelationshipContext): Promise<RelationshipSummaryResult> {
   const [apiKey, model] = await Promise.all([getOpenAiApiKey(), getPersonaOpenAIModel()]);

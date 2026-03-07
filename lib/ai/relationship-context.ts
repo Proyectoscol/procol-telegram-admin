@@ -113,20 +113,20 @@ export async function buildRelationshipContext(
       : msgRows
           .map((m) => {
             const dateStr = m.date ? new Date(m.date).toISOString().slice(0, 10) : '';
-            const who = m.from_id === fromId ? 'A' : 'B';
+            const who = m.from_id === fromId ? memberAName : memberBName;
             const text = truncate(m.text, MAX_TEXT_LEN);
-            const reply = m.replied_to_from_id != null && m.replied_to_text != null ? ` [REPLY TO ${m.replied_to_from_id === fromId ? 'A' : 'B'}: "${truncate(m.replied_to_text, MAX_TEXT_LEN)}"]` : '';
+            const reply = m.replied_to_from_id != null && m.replied_to_text != null ? ` [REPLY TO ${m.replied_to_from_id === fromId ? memberAName : memberBName}: "${truncate(m.replied_to_text, MAX_TEXT_LEN)}"]` : '';
             return `[${dateStr}] ${who}: ${text || '(no text)'}${reply}`;
           })
           .join('\n');
 
   const reactionsAtoB = (reactionsARes.rows as { emoji: string | null; target_text: string | null; target_date: string | Date; target_from_id: string }[]).map(
-    (r) => `Reacted with ${r.emoji ?? '?'} to B's message (${dateToYMD(r.target_date)}): "${truncate(r.target_text, MAX_TEXT_LEN) || '(no text)'}"`
+    (r) => `${memberAName} reacted with ${r.emoji ?? '?'} to ${memberBName}'s message (${dateToYMD(r.target_date)}): "${truncate(r.target_text, MAX_TEXT_LEN) || '(no text)'}"`
   );
   const reactionsAtoBBlob = reactionsAtoB.length > 0 ? reactionsAtoB.join('\n') : 'None in period.';
 
   const reactionsBtoA = (reactionsBRes.rows as { emoji: string | null; target_text: string | null; target_date: string | Date }[]).map(
-    (r) => `B reacted with ${r.emoji ?? '?'} to A's message (${dateToYMD(r.target_date)}): "${truncate(r.target_text, MAX_TEXT_LEN) || '(no text)'}"`
+    (r) => `${memberBName} reacted with ${r.emoji ?? '?'} to ${memberAName}'s message (${dateToYMD(r.target_date)}): "${truncate(r.target_text, MAX_TEXT_LEN) || '(no text)'}"`
   );
   const reactionsBtoABlob = reactionsBtoA.length > 0 ? reactionsBtoA.join('\n') : 'None in period.';
 
@@ -136,8 +136,8 @@ export async function buildRelationshipContext(
       ? 'No reply pairs in period.'
       : replyRows
           .map((r) => {
-            const who = r.from_id === fromId ? 'A' : 'B';
-            const toWho = r.replied_to_from_id === fromId ? 'A' : 'B';
+            const who = r.from_id === fromId ? memberAName : memberBName;
+            const toWho = r.replied_to_from_id === fromId ? memberAName : memberBName;
             return `[${dateToYMD(r.date)}] ${who} replied to ${toWho}: "${truncate(r.text, MAX_TEXT_LEN) || '(no text)'}" → "${truncate(r.replied_to_text, MAX_TEXT_LEN) || '(no text)'}"`;
           })
           .join('\n');
