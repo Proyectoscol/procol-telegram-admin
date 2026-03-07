@@ -53,6 +53,9 @@ export async function getUserForPersona(userId: number): Promise<{
 export interface BuildPersonaContextOptions {
   /** If set, only include messages/reactions from these chat IDs. Otherwise all chats. */
   chatIds?: number[] | null;
+  /** If both set, filter messages/reactions to this date range (profile range). Overrides daysBack. */
+  start?: string | null;
+  end?: string | null;
 }
 
 /**
@@ -81,10 +84,26 @@ export async function buildPersonaContext(userId: number, options?: BuildPersona
   let reactionsBlob = '';
 
   if (fromId) {
-    const chatCond = chatIds ? ' AND m.chat_id = ANY($' + (opts.daysBack != null ? '4' : '3') + '::bigint[])' : '';
-    const messagesQuery =
-      opts.daysBack != null
-        ? `SELECT m.id, m.date, m.text, m.reply_to_message_id,
+    const useRange = options?.start != null && options?.start !== '' && options?.end != null && options?.end !== '';
+    let messagesQuery: string;
+    let messagesParams: (string | number | number[])[];
+    if (useRange) {
+      const chatCond = chatIds ? ' AND m.chat_id = ANY($5::bigint[])' : '';
+      messagesQuery = `SELECT m.id, m.date, m.text, m.reply_to_message_id,
+              m2.text AS replied_to_text
+           FROM messages m
+           LEFT JOIN messages m2 ON m2.chat_id = m.chat_id AND m2.message_id = m.reply_to_message_id
+           WHERE m.from_id = $1 AND m.type = 'message'
+             AND m.date >= $2::timestamptz AND m.date <= $3::timestamptz${chatCond}
+           ORDER BY m.date DESC
+           LIMIT $4`;
+      messagesParams = [fromId, options.start!, options.end!, opts.maxMessages];
+      if (chatIds) messagesParams.push(chatIds);
+    } else {
+      const chatCond = chatIds ? ' AND m.chat_id = ANY($' + (opts.daysBack != null ? '4' : '3') + '::bigint[])' : '';
+      messagesQuery =
+        opts.daysBack != null
+          ? `SELECT m.id, m.date, m.text, m.reply_to_message_id,
               m2.text AS replied_to_text
            FROM messages m
            LEFT JOIN messages m2 ON m2.chat_id = m.chat_id AND m2.message_id = m.reply_to_message_id
@@ -92,16 +111,16 @@ export async function buildPersonaContext(userId: number, options?: BuildPersona
              AND m.date >= NOW() - ($2::int * INTERVAL '1 day')${chatCond}
            ORDER BY m.date DESC
            LIMIT $3`
-        : `SELECT m.id, m.date, m.text, m.reply_to_message_id,
+          : `SELECT m.id, m.date, m.text, m.reply_to_message_id,
               m2.text AS replied_to_text
            FROM messages m
            LEFT JOIN messages m2 ON m2.chat_id = m.chat_id AND m2.message_id = m.reply_to_message_id
            WHERE m.from_id = $1 AND m.type = 'message'${chatCond}
            ORDER BY m.date DESC
            LIMIT $2`;
-    const messagesParams: (string | number | number[])[] =
-      opts.daysBack != null ? [fromId, opts.daysBack, opts.maxMessages] : [fromId, opts.maxMessages];
-    if (chatIds) messagesParams.push(chatIds);
+      messagesParams = opts.daysBack != null ? [fromId, opts.daysBack, opts.maxMessages] : [fromId, opts.maxMessages];
+      if (chatIds) messagesParams.push(chatIds);
+    }
     const messagesRes = await pool.query(messagesQuery, messagesParams);
     const messages = (messagesRes.rows as { date: string; text: string | null; reply_to_message_id: number | null; replied_to_text: string | null }[]).reverse();
     const msgLines: string[] = [];
@@ -122,24 +141,37 @@ export async function buildPersonaContext(userId: number, options?: BuildPersona
     messagesBlob = msgLines.length > 0 ? msgLines.join('\n') : 'No messages.';
     repliesBlob = replyLines.length > 0 ? replyLines.join('\n') : 'No reply context.';
 
-    const rChatCond = chatIds ? ' AND r.chat_id = ANY($' + (opts.daysBack != null ? '4' : '3') + '::bigint[])' : '';
-    const reactionsQuery =
-      opts.daysBack != null
-        ? `SELECT r.emoji, m.text AS target_text, r.reacted_at
+    let reactionsQuery: string;
+    let reactionsParams: (string | number | number[])[];
+    if (useRange) {
+      const rChatCond = chatIds ? ' AND r.chat_id = ANY($5::bigint[])' : '';
+      reactionsQuery = `SELECT r.emoji, m.text AS target_text, r.reacted_at
+           FROM reactions r
+           JOIN messages m ON m.chat_id = r.chat_id AND m.message_id = r.message_id
+           WHERE r.reactor_from_id = $1 AND r.reacted_at >= $2::timestamptz AND r.reacted_at <= $3::timestamptz${rChatCond}
+           ORDER BY r.reacted_at DESC
+           LIMIT $4`;
+      reactionsParams = [fromId, options.start!, options.end!, opts.maxReactions];
+      if (chatIds) reactionsParams.push(chatIds);
+    } else {
+      const rChatCond = chatIds ? ' AND r.chat_id = ANY($' + (opts.daysBack != null ? '4' : '3') + '::bigint[])' : '';
+      reactionsQuery =
+        opts.daysBack != null
+          ? `SELECT r.emoji, m.text AS target_text, r.reacted_at
            FROM reactions r
            JOIN messages m ON m.chat_id = r.chat_id AND m.message_id = r.message_id
            WHERE r.reactor_from_id = $1 AND r.reacted_at >= NOW() - ($2::int * INTERVAL '1 day')${rChatCond}
            ORDER BY r.reacted_at DESC
            LIMIT $3`
-        : `SELECT r.emoji, m.text AS target_text, r.reacted_at
+          : `SELECT r.emoji, m.text AS target_text, r.reacted_at
            FROM reactions r
            JOIN messages m ON m.chat_id = r.chat_id AND m.message_id = r.message_id
            WHERE r.reactor_from_id = $1${rChatCond}
            ORDER BY r.reacted_at DESC
            LIMIT $2`;
-    const reactionsParams: (string | number | number[])[] =
-      opts.daysBack != null ? [fromId, opts.daysBack, opts.maxReactions] : [fromId, opts.maxReactions];
-    if (chatIds) reactionsParams.push(chatIds);
+      reactionsParams = opts.daysBack != null ? [fromId, opts.daysBack, opts.maxReactions] : [fromId, opts.maxReactions];
+      if (chatIds) reactionsParams.push(chatIds);
+    }
     const reactionsRes = await pool.query(reactionsQuery, reactionsParams);
     const reactionLines = (reactionsRes.rows as { emoji: string | null; target_text: string | null }[]).map(
       (r) => `Reacted with ${r.emoji ?? '?'} to: "${truncate(r.target_text, opts.maxTextLen) || '(no text)'}"`

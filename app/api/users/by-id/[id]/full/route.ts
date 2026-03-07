@@ -24,6 +24,9 @@ export async function GET(
     const { searchParams } = request.nextUrl;
     const chatIds = parseChatIds(searchParams);
     const groupBy = (searchParams.get('groupBy') as 'day' | 'week' | 'month') || 'day';
+    const start = searchParams.get('start') || null;
+    const end = searchParams.get('end') || null;
+    const hasRange = start != null && start !== '' && end != null && end !== '';
 
     // 1. User lookup
     const userRes = await queryWithRetry(
@@ -54,41 +57,50 @@ export async function GET(
 
     if (fromId) {
       const chatCond = chatIds && chatIds.length > 0 ? ' AND chat_id = ANY($2::bigint[])' : '';
+      const statsParams: (string | number[])[] = [fromId];
+      if (chatIds && chatIds.length > 0) statsParams.push(chatIds);
+      if (hasRange) {
+        statsParams.push(start!);
+        statsParams.push(end!);
+      }
+      const dateCondMsg = hasRange ? (chatIds && chatIds.length > 0 ? ' AND date >= $3::timestamptz AND date <= $4::timestamptz' : ' AND date >= $2::timestamptz AND date <= $3::timestamptz') : '';
+      const dateCondRxn = hasRange ? (chatIds && chatIds.length > 0 ? ' AND reacted_at >= $3::timestamptz AND reacted_at <= $4::timestamptz' : ' AND reacted_at >= $2::timestamptz AND reacted_at <= $3::timestamptz') : '';
+      const dateCondM = hasRange ? (chatIds && chatIds.length > 0 ? ' AND m.date >= $3::timestamptz AND m.date <= $4::timestamptz' : ' AND m.date >= $2::timestamptz AND m.date <= $3::timestamptz') : '';
+      const dateCondR = hasRange ? (chatIds && chatIds.length > 0 ? ' AND r.reacted_at >= $3::timestamptz AND r.reacted_at <= $4::timestamptz' : ' AND r.reacted_at >= $2::timestamptz AND r.reacted_at <= $3::timestamptz') : '';
       const chatCondM = chatIds && chatIds.length > 0 ? ' AND m.chat_id = ANY($2::bigint[])' : '';
       const chatCondR = chatIds && chatIds.length > 0 ? ' AND r.chat_id = ANY($2::bigint[])' : '';
-      const statsParams: (string | number[])[] = chatIds && chatIds.length > 0 ? [fromId, chatIds] : [fromId];
 
       const [statsRes, topReactedRes, tsResult, recentMsgsRes, reactionsGivenRes] = await Promise.all([
         queryWithRetry(
           `SELECT
-            (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}) AS messages_sent,
-            (SELECT COUNT(*)::int FROM messages WHERE actor_id = $1 AND type = 'service'${chatCond}) AS service_messages,
-            (SELECT COUNT(*)::int FROM reactions WHERE reactor_from_id = $1${chatCond}) AS reactions_given,
-            (SELECT COUNT(*)::int FROM messages m JOIN reactions r ON m.chat_id = r.chat_id AND m.message_id = r.message_id WHERE m.from_id = $1${chatIds && chatIds.length > 0 ? ' AND m.chat_id = ANY($2::bigint[])' : ''}) AS reactions_received,
-            (SELECT COALESCE(SUM(LENGTH(COALESCE(text, ''))), 0)::bigint FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}) AS total_chars,
-            (SELECT COALESCE(SUM(GREATEST(0, LENGTH(TRIM(COALESCE(text, '')))::int - LENGTH(REPLACE(TRIM(COALESCE(text, '')), ' ', '')) + 1)), 0)::bigint FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}) AS total_words,
-            (SELECT COUNT(DISTINCT DATE(date))::int FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}) AS active_days,
-            (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND media_type = 'photo'${chatCond}) AS photos,
-            (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND (media_type = 'video_file' OR media_type = 'video_message')${chatCond}) AS videos,
-            (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND edited_at IS NOT NULL${chatCond}) AS messages_edited,
-            (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND reply_to_message_id IS NOT NULL${chatCond}) AS replies`,
+            (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}${dateCondMsg}) AS messages_sent,
+            (SELECT COUNT(*)::int FROM messages WHERE actor_id = $1 AND type = 'service'${chatCond}${dateCondMsg}) AS service_messages,
+            (SELECT COUNT(*)::int FROM reactions WHERE reactor_from_id = $1${chatCond}${dateCondRxn.replace('r.reacted_at', 'reacted_at')}) AS reactions_given,
+            (SELECT COUNT(*)::int FROM messages m JOIN reactions r ON m.chat_id = r.chat_id AND m.message_id = r.message_id WHERE m.from_id = $1${chatIds && chatIds.length > 0 ? ' AND m.chat_id = ANY($2::bigint[])' : ''}${dateCondM}) AS reactions_received,
+            (SELECT COALESCE(SUM(LENGTH(COALESCE(text, ''))), 0)::bigint FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}${dateCondMsg}) AS total_chars,
+            (SELECT COALESCE(SUM(GREATEST(0, LENGTH(TRIM(COALESCE(text, '')))::int - LENGTH(REPLACE(TRIM(COALESCE(text, '')), ' ', '')) + 1)), 0)::bigint FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}${dateCondMsg}) AS total_words,
+            (SELECT COUNT(DISTINCT DATE(date))::int FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}${dateCondMsg}) AS active_days,
+            (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND media_type = 'photo'${chatCond}${dateCondMsg}) AS photos,
+            (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND (media_type = 'video_file' OR media_type = 'video_message')${chatCond}${dateCondMsg}) AS videos,
+            (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND edited_at IS NOT NULL${chatCond}${dateCondMsg}) AS messages_edited,
+            (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND reply_to_message_id IS NOT NULL${chatCond}${dateCondMsg}) AS replies`,
           statsParams
         ),
         queryWithRetry(
           `SELECT m.from_id AS reacted_to_id
            FROM reactions r
            JOIN messages m ON r.chat_id = m.chat_id AND r.message_id = m.message_id
-           WHERE r.reactor_from_id = $1 AND m.from_id IS NOT NULL${chatIds && chatIds.length > 0 ? ' AND r.chat_id = ANY($2::bigint[])' : ''}
+           WHERE r.reactor_from_id = $1 AND m.from_id IS NOT NULL${chatIds && chatIds.length > 0 ? ' AND r.chat_id = ANY($2::bigint[])' : ''}${dateCondR}
            GROUP BY m.from_id ORDER BY COUNT(*) DESC LIMIT 1`,
           statsParams
         ),
-        getUserTimeSeries(fromId, chatIds ?? null, groupBy),
+        getUserTimeSeries(fromId, chatIds ?? null, groupBy, start ?? null, end ?? null),
         queryWithRetry(
           `SELECT m.chat_id, c.name AS chat_name, c.slug AS chat_slug,
                   m.message_id, m.date, m.text, m.reply_to_message_id, m.edited_at, m.media_type
            FROM messages m
            LEFT JOIN chats c ON c.id = m.chat_id
-           WHERE m.from_id = $1 AND m.type = 'message'${chatCondM}
+           WHERE m.from_id = $1 AND m.type = 'message'${chatCondM}${dateCondM}
            ORDER BY m.date DESC LIMIT 15`,
           statsParams
         ),
@@ -99,7 +111,7 @@ export async function GET(
            JOIN messages m ON r.chat_id = m.chat_id AND r.message_id = m.message_id
            LEFT JOIN users u ON u.from_id = m.from_id
            LEFT JOIN chats c ON c.id = r.chat_id
-           WHERE r.reactor_from_id = $1${chatCondR}
+           WHERE r.reactor_from_id = $1${chatCondR}${dateCondR}
            GROUP BY r.chat_id, c.name, c.slug, m.from_id, u.display_name
            ORDER BY r.chat_id, count DESC`,
           statsParams

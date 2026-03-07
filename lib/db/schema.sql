@@ -200,6 +200,7 @@ CREATE TABLE IF NOT EXISTS contact_personas (
 
 CREATE INDEX IF NOT EXISTS idx_contact_personas_user ON contact_personas(user_id);
 ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS inference_evidence TEXT;
+ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS generated_for_range TEXT;
 
 -- AI usage audit and cost tracking.
 CREATE TABLE IF NOT EXISTS ai_usage_logs (
@@ -252,3 +253,4 @@ CREATE TABLE IF NOT EXISTS relationship_insights (
 );
 CREATE INDEX IF NOT EXISTS idx_relationship_insights_user ON relationship_insights(user_id);
 CREATE INDEX IF NOT EXISTS idx_relationship_insights_other ON relationship_insights(other_user_id);
+ALTER TABLE relationship_insights ADD COLUMN IF NOT EXISTS generated_for_range TEXT;

@@ -40,7 +40,7 @@ export async function GET(
 
     const { rows } = await pool.query(
       `SELECT summary, tone, mutual_or_one_sided, evolution, inference_evidence,
-              model_used, prompt_tokens, completion_tokens, run_at
+              model_used, prompt_tokens, completion_tokens, run_at, generated_for_range
        FROM relationship_insights WHERE user_id = $1 AND other_user_id = $2`,
       [userId, otherUserId]
     );
@@ -58,6 +58,7 @@ export async function GET(
       prompt_tokens: r.prompt_tokens,
       completion_tokens: r.completion_tokens,
       run_at: r.run_at,
+      generated_for_range: r.generated_for_range,
     });
   } catch (err) {
     log.error('relationship-summary', 'GET relationship-summary failed', err);
@@ -78,6 +79,9 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const otherFromId = body?.otherFromId ?? body?.other_from_id;
     const chatIds = Array.isArray(body?.chatIds) ? body.chatIds : undefined;
+    const start = typeof body?.start === 'string' ? body.start : undefined;
+    const end = typeof body?.end === 'string' ? body.end : undefined;
+    const rangeLabel = typeof body?.rangeLabel === 'string' ? body.rangeLabel : undefined;
 
     if (!otherFromId || typeof otherFromId !== 'string') {
       return NextResponse.json({ error: 'otherFromId required' }, { status: 400 });
@@ -89,15 +93,15 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const context = await buildRelationshipContext(fromId, otherFromId.trim(), chatIds);
+    const context = await buildRelationshipContext(fromId, otherFromId.trim(), chatIds, start, end);
     const result = await generateRelationshipSummary(context);
 
     const p = result.data;
     await pool.query(
       `INSERT INTO relationship_insights (
         user_id, other_user_id, summary, tone, mutual_or_one_sided, evolution, inference_evidence,
-        model_used, prompt_tokens, completion_tokens, run_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        model_used, prompt_tokens, completion_tokens, run_at, generated_for_range
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), $11)
       ON CONFLICT (user_id, other_user_id) DO UPDATE SET
         summary = EXCLUDED.summary,
         tone = EXCLUDED.tone,
@@ -107,7 +111,8 @@ export async function POST(
         model_used = EXCLUDED.model_used,
         prompt_tokens = EXCLUDED.prompt_tokens,
         completion_tokens = EXCLUDED.completion_tokens,
-        run_at = EXCLUDED.run_at`,
+        run_at = EXCLUDED.run_at,
+        generated_for_range = EXCLUDED.generated_for_range`,
       [
         userId,
         otherUserId,
@@ -119,6 +124,7 @@ export async function POST(
         result.usage.model,
         result.usage.prompt_tokens,
         result.usage.completion_tokens,
+        rangeLabel ?? null,
       ]
     );
 
@@ -149,7 +155,7 @@ export async function POST(
 
     const { rows } = await pool.query(
       `SELECT summary, tone, mutual_or_one_sided, evolution, inference_evidence,
-              model_used, prompt_tokens, completion_tokens, run_at
+              model_used, prompt_tokens, completion_tokens, run_at, generated_for_range
        FROM relationship_insights WHERE user_id = $1 AND other_user_id = $2`,
       [userId, otherUserId]
     );
@@ -165,6 +171,7 @@ export async function POST(
         prompt_tokens: insight.prompt_tokens,
         completion_tokens: insight.completion_tokens,
         run_at: insight.run_at,
+        generated_for_range: insight.generated_for_range,
       },
       usage: result.usage,
     });

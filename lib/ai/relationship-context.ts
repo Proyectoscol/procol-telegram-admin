@@ -35,15 +35,24 @@ function dateToYMD(d: string | Date | null | undefined): string {
 /**
  * Build context for relationship summary between profile user (fromId = A) and other user (otherFromId = B).
  * Optional chatIds to restrict to specific chats.
+ * Optional start/end (ISO strings) to filter to profile date range; when both set, overrides DAYS_BACK.
  */
 export async function buildRelationshipContext(
   fromId: string,
   otherFromId: string,
-  chatIds?: number[] | null
+  chatIds?: number[] | null,
+  start?: string | null,
+  end?: string | null
 ): Promise<RelationshipContext> {
-  const chatCond = chatIds && chatIds.length > 0 ? ' AND m.chat_id = ANY($4::bigint[])' : '';
-  const chatCondR = chatIds && chatIds.length > 0 ? ' AND r.chat_id = ANY($4::bigint[])' : '';
-  const params = chatIds && chatIds.length > 0 ? [fromId, otherFromId, DAYS_BACK, chatIds] : [fromId, otherFromId, DAYS_BACK];
+  const useRange = start != null && start !== '' && end != null && end !== '';
+  const chatCond = chatIds && chatIds.length > 0 ? (useRange ? ' AND m.chat_id = ANY($5::bigint[])' : ' AND m.chat_id = ANY($4::bigint[])') : '';
+  const chatCondR = chatIds && chatIds.length > 0 ? (useRange ? ' AND r.chat_id = ANY($5::bigint[])' : ' AND r.chat_id = ANY($4::bigint[])') : '';
+  const params = useRange
+    ? (chatIds && chatIds.length > 0 ? [fromId, otherFromId, start, end, chatIds] : [fromId, otherFromId, start, end])
+    : (chatIds && chatIds.length > 0 ? [fromId, otherFromId, DAYS_BACK, chatIds] : [fromId, otherFromId, DAYS_BACK]);
+
+  const dateCond = useRange ? ' AND m.date >= $3::timestamptz AND m.date <= $4::timestamptz' : ' AND m.date >= NOW() - ($3::int * INTERVAL \'1 day\')';
+  const dateCondR = useRange ? ' AND r.reacted_at >= $3::timestamptz AND r.reacted_at <= $4::timestamptz' : ' AND r.reacted_at >= NOW() - ($3::int * INTERVAL \'1 day\')';
 
   const [namesRes, messagesRes, reactionsARes, reactionsBRes, repliesRes] = await Promise.all([
     pool.query<{ display_name: string | null; from_id: string }>(
@@ -54,9 +63,8 @@ export async function buildRelationshipContext(
       `SELECT m.date, m.from_id, m.text, m.reply_to_message_id, m2.from_id AS replied_to_from_id, m2.text AS replied_to_text
        FROM messages m
        LEFT JOIN messages m2 ON m2.chat_id = m.chat_id AND m2.message_id = m.reply_to_message_id
-       WHERE m.date >= NOW() - ($3::int * INTERVAL '1 day')
-         AND ((m.from_id = $1 AND (m.reply_to_message_id IS NULL OR m2.from_id = $2)) OR (m.from_id = $2 AND (m.reply_to_message_id IS NULL OR m2.from_id = $1)))
-         AND m.type = 'message'${chatCond}
+       WHERE ((m.from_id = $1 AND (m.reply_to_message_id IS NULL OR m2.from_id = $2)) OR (m.from_id = $2 AND (m.reply_to_message_id IS NULL OR m2.from_id = $1)))
+         AND m.type = 'message'${dateCond}${chatCond}
        ORDER BY m.date ASC
        LIMIT ${MAX_MESSAGES}`,
       params
@@ -65,7 +73,7 @@ export async function buildRelationshipContext(
       `SELECT r.emoji, m.text AS target_text, m.date AS target_date, m.from_id AS target_from_id
        FROM reactions r
        JOIN messages m ON r.chat_id = m.chat_id AND r.message_id = m.message_id
-       WHERE r.reactor_from_id = $1 AND m.from_id = $2 AND r.reacted_at >= NOW() - ($3::int * INTERVAL '1 day')${chatCondR}
+       WHERE r.reactor_from_id = $1 AND m.from_id = $2${dateCondR}${chatCondR}
        ORDER BY r.reacted_at DESC
        LIMIT 50`,
       params
@@ -74,7 +82,7 @@ export async function buildRelationshipContext(
       `SELECT r.emoji, m.text AS target_text, m.date AS target_date, m.from_id AS target_from_id
        FROM reactions r
        JOIN messages m ON r.chat_id = m.chat_id AND r.message_id = m.message_id
-       WHERE r.reactor_from_id = $2 AND m.from_id = $1 AND r.reacted_at >= NOW() - ($3::int * INTERVAL '1 day')${chatCondR}
+       WHERE r.reactor_from_id = $2 AND m.from_id = $1${dateCondR}${chatCondR}
        ORDER BY r.reacted_at DESC
        LIMIT 50`,
       params
@@ -84,7 +92,7 @@ export async function buildRelationshipContext(
        FROM messages m
        JOIN messages parent ON parent.chat_id = m.chat_id AND parent.message_id = m.reply_to_message_id
        WHERE m.from_id IN ($1, $2) AND parent.from_id IN ($1, $2) AND m.from_id != parent.from_id
-         AND m.date >= NOW() - ($3::int * INTERVAL '1 day')${chatCond}
+         ${dateCond}${chatCond}
        ORDER BY m.date ASC
        LIMIT 60`,
       params

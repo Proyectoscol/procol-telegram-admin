@@ -22,7 +22,7 @@ export async function GET(
     const { rows } = await pool.query(
       `SELECT id, user_id, summary, topics, inferred_age_range, inferred_occupation, inferred_goals,
               social_links, content_preferences, pain_points, inference_evidence,
-              model_used, prompt_tokens, completion_tokens, run_at
+              model_used, prompt_tokens, completion_tokens, run_at, generated_for_range
        FROM contact_personas WHERE user_id = $1`,
       [id]
     );
@@ -40,7 +40,7 @@ export async function GET(
 }
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -54,9 +54,14 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
     const userId = id;
+    const body = await request.json().catch(() => ({}));
+    const start = typeof body?.start === 'string' ? body.start : undefined;
+    const end = typeof body?.end === 'string' ? body.end : undefined;
+    const chatIds = Array.isArray(body?.chatIds) ? body.chatIds : undefined;
+    const rangeLabel = typeof body?.rangeLabel === 'string' ? body.rangeLabel : undefined;
 
     const result = await runPersonaSerial(async () => {
-      const context = await buildPersonaContext(userId);
+      const context = await buildPersonaContext(userId, { chatIds, start, end });
       return generatePersona(context);
     });
 
@@ -68,8 +73,8 @@ export async function POST(
       `INSERT INTO contact_personas (
         user_id, summary, topics, inferred_age_range, inferred_occupation, inferred_goals,
         social_links, content_preferences, pain_points, inference_evidence,
-        model_used, prompt_tokens, completion_tokens, run_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+        model_used, prompt_tokens, completion_tokens, run_at, generated_for_range
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14)
       ON CONFLICT (user_id) DO UPDATE SET
         summary = EXCLUDED.summary,
         topics = EXCLUDED.topics,
@@ -83,7 +88,8 @@ export async function POST(
         model_used = EXCLUDED.model_used,
         prompt_tokens = EXCLUDED.prompt_tokens,
         completion_tokens = EXCLUDED.completion_tokens,
-        run_at = EXCLUDED.run_at`,
+        run_at = EXCLUDED.run_at,
+        generated_for_range = EXCLUDED.generated_for_range`,
       [
         userId,
         p.summary ?? '',
@@ -98,6 +104,7 @@ export async function POST(
         result.usage.model,
         result.usage.prompt_tokens,
         result.usage.completion_tokens,
+        rangeLabel ?? null,
       ]
     );
 
@@ -129,7 +136,7 @@ export async function POST(
     const { rows } = await pool.query(
       `SELECT id, user_id, summary, topics, inferred_age_range, inferred_occupation, inferred_goals,
               social_links, content_preferences, pain_points, inference_evidence,
-              model_used, prompt_tokens, completion_tokens, run_at
+              model_used, prompt_tokens, completion_tokens, run_at, generated_for_range
        FROM contact_personas WHERE user_id = $1`,
       [userId]
     );

@@ -138,6 +138,7 @@ interface Persona {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   run_at: string | null;
+  generated_for_range?: string | null;
 }
 
 interface TopRelationship {
@@ -409,7 +410,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
     return () => controller.abort();
   }, [user?.id, byId, fromId]);
 
-  // Top 3 relationships (same chat filter as profile)
+  // Top 3 relationships (same chat + date range as profile KPIs)
   useEffect(() => {
     if (!fromId) {
       setTopRelationships([]);
@@ -419,13 +420,15 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
     setTopRelationshipsLoading(true);
     const params = new URLSearchParams();
     profileChatIds.forEach((id) => params.append('chatId', String(id)));
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
     fetch(`/api/users/${encodeURIComponent(fromId)}/top-relationships?${params}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : { topRelationships: [] }))
       .then((data) => setTopRelationships(Array.isArray(data.topRelationships) ? data.topRelationships : []))
       .catch(() => setTopRelationships([]))
       .finally(() => setTopRelationshipsLoading(false));
     return () => controller.abort();
-  }, [fromId, profileChatIds]);
+  }, [fromId, profileChatIds, start, end]);
 
   // Preload stored relationship insights for top 3
   useEffect(() => {
@@ -452,7 +455,13 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       const res = await fetch(`/api/users/${encodeURIComponent(fromId)}/relationship-summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ otherFromId, chatIds: profileChatIds.length > 0 ? profileChatIds : undefined }),
+        body: JSON.stringify({
+        otherFromId,
+        chatIds: profileChatIds.length > 0 ? profileChatIds : undefined,
+        start: start ?? undefined,
+        end: end ?? undefined,
+        rangeLabel: QUICK_RANGE_OPTIONS.find((o) => o.value === quickRange)?.label ?? quickRange,
+      }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to generate');
@@ -515,6 +524,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
   const formatDate = (d: string | null) =>
     d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
+  const rangeLabel = QUICK_RANGE_OPTIONS.find((o) => o.value === quickRange)?.label ?? quickRange;
   const handleGeneratePersona = async () => {
     if (!user) return;
     setPersonaGenerating(true);
@@ -524,7 +534,12 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify({
+          start: start ?? undefined,
+          end: end ?? undefined,
+          chatIds: profileChatIds.length > 0 ? profileChatIds : undefined,
+          rangeLabel,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to generate persona');
@@ -837,6 +852,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
             )}
             <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginTop: '1rem', marginBottom: 0 }}>
               Last run: {persona.run_at ? formatDate(persona.run_at) : '—'}
+              {persona.generated_for_range && ` · Generated for: ${persona.generated_for_range}`}
               {persona.model_used && ` · Model: ${persona.model_used}`}
               {(persona.prompt_tokens != null || persona.completion_tokens != null) && (
                 <> · {persona.prompt_tokens ?? 0} in / {persona.completion_tokens ?? 0} out tokens</>
@@ -852,6 +868,9 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       {fromId && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Top 3 relationships</h2>
+          <p style={{ color: '#8b98a5', fontSize: '0.8125rem', margin: '0 0 0.75rem' }}>
+            Same period and chats as the stats above. Counts: reactions (emoji on messages) and replies (direct replies to a message).
+          </p>
           {topRelationshipsLoading && topRelationships.length === 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
               <LoadingSpinner size="sm" />
@@ -867,15 +886,17 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
             const generating = relationshipGeneratingByKey[rel.otherFromId];
             const relError = relationshipErrorByKey[rel.otherFromId];
             const isLast = idx === topRelationships.length - 1;
+            const profileName = user?.display_name || user?.first_name || user?.from_id || 'This contact';
             return (
               <div key={rel.otherFromId} style={{ marginBottom: isLast ? 0 : '1.25rem', paddingBottom: isLast ? 0 : '1.25rem', borderBottom: isLast ? 'none' : '1px solid #2f3336' }}>
-                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.35rem' }}>
                   <a href={`/users/${encodeURIComponent(rel.otherFromId)}`} style={{ fontWeight: 600 }}>
                     {rel.otherDisplayName}
                   </a>
-                  <span style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>
-                    {rel.reactionsToThem + rel.repliesToThem} from you → them · {rel.reactionsFromThem + rel.repliesFromThem} from them → you
-                  </span>
+                </div>
+                <div style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
+                  <div><strong>{profileName}</strong> → {rel.otherDisplayName}: {rel.reactionsToThem} reactions, {rel.repliesToThem} replies</div>
+                  <div>{rel.otherDisplayName} → <strong>{profileName}</strong>: {rel.reactionsFromThem} reactions, {rel.repliesFromThem} replies</div>
                 </div>
                 {relError && <p style={{ color: '#f91854', fontSize: '0.875rem', margin: '0.25rem 0 0.5rem' }}>{relError}</p>}
                 {loading && !insight && <p style={{ color: '#8b98a5', fontSize: '0.875rem', margin: 0 }}>Loading summary…</p>}
@@ -907,6 +928,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
                     )}
                     <p style={{ color: '#8b98a5', fontSize: '0.75rem', marginTop: '0.5rem', marginBottom: 0 }}>
                       {insight.run_at ? `Generated ${formatDate(insight.run_at)}` : ''}
+                      {insight.generated_for_range && ` · Generated for: ${insight.generated_for_range}`}
                       {insight.model_used && ` · ${insight.model_used}`}
                     </p>
                     <button type="button" className="btn btn-secondary" style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }} onClick={() => handleGenerateRelationshipSummary(rel.otherFromId)} disabled={generating}>

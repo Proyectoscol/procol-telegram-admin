@@ -16,41 +16,57 @@ export async function GET(
   try {
     await ensureSchema();
     const fromId = decodeURIComponent((await params).fromId);
-    const chatIds = parseChatIds(request.nextUrl.searchParams);
+    const { searchParams } = request.nextUrl;
+    const chatIds = parseChatIds(searchParams);
+    const start = searchParams.get('start') || null;
+    const end = searchParams.get('end') || null;
+    const hasRange = start != null && start !== '' && end != null && end !== '';
 
-    const chatCond = chatIds && chatIds.length > 0 ? ' AND m.chat_id = ANY($2::bigint[])' : '';
-    const chatCondR = chatIds && chatIds.length > 0 ? ' AND r.chat_id = ANY($2::bigint[])' : '';
-    const chatCondParent = chatIds && chatIds.length > 0 ? ' AND parent.chat_id = ANY($2::bigint[])' : '';
-    const chatCondM = chatIds && chatIds.length > 0 ? ' AND m.chat_id = ANY($2::bigint[])' : '';
-    const paramsArr = chatIds && chatIds.length > 0 ? [fromId, chatIds] : [fromId];
+    const paramsArr: (string | number[])[] = [fromId];
+    if (chatIds && chatIds.length > 0) paramsArr.push(chatIds);
+    if (hasRange) {
+      paramsArr.push(start!);
+      paramsArr.push(end!);
+    }
+    const idxChat = chatIds && chatIds.length > 0 ? 2 : 0;
+    const idxStart = hasRange ? (idxChat ? 3 : 2) : 0;
+    const idxEnd = hasRange ? (idxChat ? 4 : 3) : 0;
+
+    const chatCond = idxChat ? ` AND m.chat_id = ANY($${idxChat}::bigint[])` : '';
+    const chatCondR = idxChat ? ` AND r.chat_id = ANY($${idxChat}::bigint[])` : '';
+    const chatCondParent = idxChat ? ` AND parent.chat_id = ANY($${idxChat}::bigint[])` : '';
+    const chatCondM = idxChat ? ` AND m.chat_id = ANY($${idxChat}::bigint[])` : '';
+    const dateCondMsg = hasRange ? ` AND m.date >= $${idxStart}::timestamptz AND m.date <= $${idxEnd}::timestamptz` : '';
+    const dateCondParent = hasRange ? ` AND parent.date >= $${idxStart}::timestamptz AND parent.date <= $${idxEnd}::timestamptz` : '';
+    const dateCondR = hasRange ? ` AND r.reacted_at >= $${idxStart}::timestamptz AND r.reacted_at <= $${idxEnd}::timestamptz` : '';
 
     const q = `
 WITH
 reactions_to AS (
   SELECT m.from_id AS other_from_id, COUNT(*)::int AS cnt FROM reactions r
   JOIN messages m ON r.chat_id = m.chat_id AND r.message_id = m.message_id
-  WHERE r.reactor_from_id = $1 AND m.from_id IS NOT NULL AND m.from_id != $1${chatCondR}
+  WHERE r.reactor_from_id = $1 AND m.from_id IS NOT NULL AND m.from_id != $1${chatCondR}${dateCondR}
   GROUP BY m.from_id
 ),
 replies_to AS (
   SELECT parent.from_id AS other_from_id, COUNT(*)::int AS cnt
   FROM messages m
   JOIN messages parent ON parent.chat_id = m.chat_id AND parent.message_id = m.reply_to_message_id
-  WHERE m.from_id = $1 AND parent.from_id IS NOT NULL AND parent.from_id != $1${chatCondParent}
+  WHERE m.from_id = $1 AND parent.from_id IS NOT NULL AND parent.from_id != $1${chatCondParent}${dateCondMsg}
   GROUP BY parent.from_id
 ),
 reactions_from AS (
   SELECT r.reactor_from_id AS other_from_id, COUNT(*)::int AS cnt
   FROM reactions r
   JOIN messages m ON r.chat_id = m.chat_id AND r.message_id = m.message_id
-  WHERE m.from_id = $1 AND r.reactor_from_id != $1${chatCondR}
+  WHERE m.from_id = $1 AND r.reactor_from_id != $1${chatCondR}${dateCondR}
   GROUP BY r.reactor_from_id
 ),
 replies_from AS (
   SELECT m.from_id AS other_from_id, COUNT(*)::int AS cnt
   FROM messages m
   JOIN messages parent ON parent.chat_id = m.chat_id AND parent.message_id = m.reply_to_message_id
-  WHERE parent.from_id = $1 AND m.from_id != $1${chatCondM}
+  WHERE parent.from_id = $1 AND m.from_id != $1${chatCondM}${dateCondMsg}
   GROUP BY m.from_id
 ),
 combined AS (
