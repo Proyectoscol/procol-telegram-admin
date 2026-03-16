@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { formatMembersAsText, type MemberForTextExport } from '@/lib/utils/formatMembersAsText';
 
 export interface ExportColumn {
   key: string;
@@ -39,6 +40,8 @@ interface ExportCsvModalProps {
   columns: ExportColumn[];
 }
 
+type ExportFormat = 'csv' | 'formattedText';
+
 export function ExportCsvModal({
   open,
   onClose,
@@ -48,6 +51,8 @@ export function ExportCsvModal({
   columns,
 }: ExportCsvModalProps) {
   const [memberFilter, setMemberFilter] = useState<MemberFilter>('all');
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('csv');
+  const [copied, setCopied] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set(columns.map((c) => c.key)));
 
   const filteredRows = useMemo(() => {
@@ -58,6 +63,26 @@ export function ExportCsvModal({
       return Boolean(v) === isMember;
     });
   }, [rows, memberFilter]);
+
+  const formattedText = useMemo(
+    () => formatMembersAsText(filteredRows as MemberForTextExport[]),
+    [filteredRows]
+  );
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  const copyToClipboard = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(formattedText);
+      setCopied(true);
+    } catch {
+      // ignore
+    }
+  }, [formattedText]);
 
   const selectedColumns = useMemo(
     () => columns.filter((c) => selectedKeys.has(c.key)),
@@ -131,34 +156,97 @@ export function ExportCsvModal({
             </p>
           </section>
           <section>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <label style={{ fontWeight: 600, fontSize: '0.8125rem' }}>Columns to include</label>
-              <span style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="button" className="btn btn-secondary" onClick={selectAllColumns} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
-                  All
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={deselectAllColumns} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
-                  None
-                </button>
-              </span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1rem', maxHeight: 200, overflowY: 'auto' }}>
-              {columns.map((col) => (
-                <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedKeys.has(col.key)}
-                    onChange={() => toggleColumn(col.key)}
-                  />
-                  <span>{col.label}</span>
-                </label>
-              ))}
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.8125rem' }}>
+              Export format
+            </label>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="exportFormat"
+                  checked={exportFormat === 'csv'}
+                  onChange={() => setExportFormat('csv')}
+                />
+                <span>CSV (download file)</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="exportFormat"
+                  checked={exportFormat === 'formattedText'}
+                  onChange={() => setExportFormat('formattedText')}
+                />
+                <span>Formatted Text (Telegram)</span>
+              </label>
             </div>
           </section>
+          {exportFormat === 'csv' && (
+            <section>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <label style={{ fontWeight: 600, fontSize: '0.8125rem' }}>Columns to include</label>
+                <span style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button type="button" className="btn btn-secondary" onClick={selectAllColumns} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
+                    All
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={deselectAllColumns} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
+                    None
+                  </button>
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1rem', maxHeight: 200, overflowY: 'auto' }}>
+                {columns.map((col) => (
+                  <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedKeys.has(col.key)}
+                      onChange={() => toggleColumn(col.key)}
+                    />
+                    <span>{col.label}</span>
+                  </label>
+                ))}
+              </div>
+            </section>
+          )}
+          {exportFormat === 'formattedText' && (
+            <section>
+              <div style={{ marginBottom: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={copyToClipboard}
+                  disabled={filteredRows.length === 0}
+                >
+                  {copied ? 'Copied!' : 'Copy to clipboard'}
+                </button>
+              </div>
+              <textarea
+                readOnly
+                value={formattedText}
+                spellCheck={false}
+                style={{
+                  width: '100%',
+                  minHeight: '12rem',
+                  maxHeight: '20rem',
+                  overflowY: 'auto',
+                  fontFamily: 'ui-monospace, monospace',
+                  fontSize: '0.8125rem',
+                  padding: '0.5rem',
+                  borderRadius: 4,
+                  border: '1px solid var(--border-color, #444)',
+                  background: 'var(--input-bg, #1e2328)',
+                  color: 'inherit',
+                  resize: 'vertical',
+                }}
+                aria-label="Formatted member list for Telegram"
+              />
+            </section>
+          )}
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
-            <button type="button" className="btn btn-primary" onClick={downloadCsv} disabled={selectedColumns.length === 0 || filteredRows.length === 0}>
-              Download CSV
-            </button>
+            {exportFormat === 'csv' && (
+              <button type="button" className="btn btn-primary" onClick={downloadCsv} disabled={selectedColumns.length === 0 || filteredRows.length === 0}>
+                Download CSV
+              </button>
+            )}
             <button type="button" className="btn btn-secondary" onClick={onClose}>
               Cancel
             </button>
