@@ -7,16 +7,11 @@ let _pool: Pool | null = null;
 let _nextQueryId = 1;
 const _activeQueries = new Map<number, { preview: string; startedAt: number }>();
 
-/**
- * Fixed pool sizing for Supabase Session Pooler: 5 connections, 15s connect timeout.
- * Use Session Pooler (port 5432) for persistent Docker containers — Transaction
- * Pooler (port 6543) is often blocked by hosting providers on outbound traffic.
- * No env overrides — avoids configuration drift and connection exhaustion.
- */
-// Keep pool small: Supabase free tier slows sharply with > 3-5 concurrent queries.
-// With fast queries (86-756ms observed) and pg-pool queuing, 5 connections serve
-// concurrent bursts well within the 40s acquire timeout.
-const POOL_MAX = 5;
+// Use Transaction Pooler (port 6543) for Vercel/serverless — no per-session connection
+// limit. Session Pooler (port 5432) caps at 15 connections total, which multiple
+// concurrent Vercel instances (each holding 5) exhaust immediately.
+// Pool of 2 per serverless instance is sufficient; pg-pool queues additional requests.
+const POOL_MAX = 2;
 // CONNECTION_TIMEOUT_MS must be > QUERY_TIMEOUT_MS so a waiting request outlives a hung query.
 const CONNECTION_TIMEOUT_MS = 40000;
 const IDLE_TIMEOUT_MS = 30000;
