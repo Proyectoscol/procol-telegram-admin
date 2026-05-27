@@ -2,13 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureSchema, queryWithRetry } from '@/lib/db/client';
 import { getRedis } from '@/lib/redis';
 import { log } from '@/lib/logger';
+import { JOB_KEY, QUEUE_KEY, LOG_KEY } from '@/lib/batch/persona-batch-keys';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-export const JOB_KEY = 'persona_batch:job';
-export const QUEUE_KEY = 'persona_batch:queue';
-export const LOG_KEY = 'persona_batch:log';
 
 type Filter = 'all' | 'premium' | 'no_persona';
 

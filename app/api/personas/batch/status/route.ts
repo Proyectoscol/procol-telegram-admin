@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getRedis } from '@/lib/redis';
-import { JOB_KEY, LOG_KEY, QUEUE_KEY } from '@/app/api/personas/batch/start/route';
+import { JOB_KEY, LOG_KEY, QUEUE_KEY } from '@/lib/batch/persona-batch-keys';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

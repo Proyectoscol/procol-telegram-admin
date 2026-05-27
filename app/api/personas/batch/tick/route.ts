@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getRedis } from '@/lib/redis';
 import { generateAndSavePersona } from '@/lib/ai/run-persona';
 import { log } from '@/lib/logger';
-import { JOB_KEY, QUEUE_KEY, LOG_KEY } from '@/app/api/personas/batch/start/route';
+import { JOB_KEY, QUEUE_KEY, LOG_KEY } from '@/lib/batch/persona-batch-keys';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
