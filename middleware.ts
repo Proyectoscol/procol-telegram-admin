@@ -62,6 +62,7 @@ export const config = {
     '/login',
     '/contacts',
     '/import',
+    '/intelligence',
     '/settings',
     '/users/:path*',
   ],

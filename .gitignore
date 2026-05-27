@@ -11,3 +11,4 @@ scripts/users-list-import.sql
 **/messages*.html
 **/telegram*statistics*.xlsx
 **/estadisticas*.xlsx
+.vercel

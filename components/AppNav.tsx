@@ -13,6 +13,7 @@ export function AppNav() {
         <div className="nav-links">
           <a href="/">Dashboard</a>
           <a href="/contacts">Contacts</a>
+          <a href="/intelligence">Intelligence</a>
           <a href="/import">Import</a>
           <a href="/settings" className="nav-link-icon" title="Settings" aria-label="Settings">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
