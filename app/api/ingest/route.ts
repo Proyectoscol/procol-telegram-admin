@@ -20,12 +20,27 @@ export async function POST(request: NextRequest) {
       if (!blobUrl) {
         return NextResponse.json({ error: 'No blobUrl provided' }, { status: 400 });
       }
-      const fileRes = await fetch(blobUrl);
-      if (!fileRes.ok) {
-        return NextResponse.json({ error: 'Failed to fetch uploaded file' }, { status: 400 });
+      // Retry up to 3 times — blob may not be immediately accessible after upload
+      let fileRes: Response | null = null;
+      let fetchErr: unknown;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 1500));
+        try {
+          fileRes = await fetch(blobUrl);
+          if (fileRes.ok) break;
+        } catch (err) {
+          fetchErr = err;
+          fileRes = null;
+        }
+      }
+      if (!fileRes?.ok) {
+        const detail = fileRes
+          ? `HTTP ${fileRes.status}: ${(await fileRes.text().catch(() => '')).slice(0, 200)}`
+          : (fetchErr instanceof Error ? fetchErr.message : String(fetchErr));
+        return NextResponse.json({ error: `Failed to fetch uploaded file: ${detail}` }, { status: 400 });
       }
       text = await fileRes.text();
-      fileName = blobUrl.split('/').pop() ?? 'result.json';
+      fileName = blobUrl.split('/').pop()?.split('?')[0] ?? 'result.json';
 
       // Delete from blob storage after reading
       const { del } = await import('@vercel/blob');

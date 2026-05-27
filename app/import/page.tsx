@@ -83,9 +83,11 @@ export default function ImportPage() {
     setLoading(true);
     try {
       // Upload directly to Vercel Blob to bypass the 4.5MB function payload limit
-      const blob = await upload(file.name, file, {
+      const suffix = Math.random().toString(36).slice(2, 8);
+      const blob = await upload(`ingest-${suffix}-${file.name}`, file, {
         access: 'public',
         handleUploadUrl: '/api/ingest/upload-url',
+        multipart: true,
       });
       const res = await fetch('/api/ingest', {
         method: 'POST',
