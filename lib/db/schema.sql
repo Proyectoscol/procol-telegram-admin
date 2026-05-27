@@ -254,3 +254,12 @@ CREATE TABLE IF NOT EXISTS relationship_insights (
 CREATE INDEX IF NOT EXISTS idx_relationship_insights_user ON relationship_insights(user_id);
 CREATE INDEX IF NOT EXISTS idx_relationship_insights_other ON relationship_insights(other_user_id);
 ALTER TABLE relationship_insights ADD COLUMN IF NOT EXISTS generated_for_range TEXT;
+
+-- Sales intelligence fields for contact_personas
+ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS buying_intent_score SMALLINT DEFAULT 0;
+ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS buying_signals JSONB DEFAULT '[]';
+ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS follow_up_priority TEXT;
+ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS engagement_level TEXT;
+ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS outreach_approach TEXT;
+ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS objection_patterns JSONB DEFAULT '[]';
+ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS spending_capacity TEXT;

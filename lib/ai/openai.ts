@@ -23,6 +23,20 @@ export interface PersonaOutput {
   pain_points: string[];
   /** Key inferences with references to specific messages or reactions that support them. */
   inference_evidence: string;
+  /** 0–10 purchase intent score. */
+  buying_intent_score: number;
+  /** Specific phrases/behaviors indicating purchase intent. */
+  buying_signals: string[];
+  /** hot | warm | cold | nurture */
+  follow_up_priority: string;
+  /** champion | active | passive | lurker */
+  engagement_level: string;
+  /** Personalized sales approach recommendation. */
+  outreach_approach: string;
+  /** Likely objections this person would raise. */
+  objection_patterns: string[];
+  /** high | medium | low | unknown */
+  spending_capacity: string;
 }
 
 export interface PersonaCompletionResult {
@@ -65,8 +79,20 @@ function buildPersonaJsonSchema(descriptions: Record<string, string>) {
           content_preferences: { type: 'string' as const, description: descriptions.content_preferences ?? '' },
           pain_points: { type: 'array' as const, items: { type: 'string' as const }, description: descriptions.pain_points ?? '' },
           inference_evidence: { type: 'string' as const, description: descriptions.inference_evidence ?? '' },
+          buying_intent_score: { type: 'integer' as const, description: descriptions.buying_intent_score ?? 'Integer 0-10 purchase intent score.' },
+          buying_signals: { type: 'array' as const, items: { type: 'string' as const }, description: descriptions.buying_signals ?? '' },
+          follow_up_priority: { type: 'string' as const, description: descriptions.follow_up_priority ?? 'hot | warm | cold | nurture' },
+          engagement_level: { type: 'string' as const, description: descriptions.engagement_level ?? 'champion | active | passive | lurker' },
+          outreach_approach: { type: 'string' as const, description: descriptions.outreach_approach ?? '' },
+          objection_patterns: { type: 'array' as const, items: { type: 'string' as const }, description: descriptions.objection_patterns ?? '' },
+          spending_capacity: { type: 'string' as const, description: descriptions.spending_capacity ?? 'high | medium | low | unknown' },
         },
-        required: ['summary', 'topics', 'inferred_profile', 'social_links', 'content_preferences', 'pain_points', 'inference_evidence'],
+        required: [
+          'summary', 'topics', 'inferred_profile', 'social_links', 'content_preferences',
+          'pain_points', 'inference_evidence', 'buying_intent_score', 'buying_signals',
+          'follow_up_priority', 'engagement_level', 'outreach_approach', 'objection_patterns',
+          'spending_capacity',
+        ],
         additionalProperties: false,
       },
     },

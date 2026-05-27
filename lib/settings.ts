@@ -30,13 +30,22 @@ export const DEFAULT_PERSONA_MODEL = 'gpt-4o-mini-2024-07-18';
 export const DEFAULT_PERSONA_MAX_TEXT_LEN = 500;
 
 /** Default system prompt for persona generation. Seeded into settings on first use if missing. */
-export const DEFAULT_PERSONA_SYSTEM_PROMPT = `You are an analyst for a community about money and personal improvement. Given a member's profile, their recent messages (including when they reply to another message — the [REPLY TO: "..."] shows the message they replied to), and what messages they reacted to, produce a structured buyer persona.
+export const DEFAULT_PERSONA_SYSTEM_PROMPT = `You are an analyst for a community about money and personal improvement. Given a member's profile, their recent messages (including when they reply to another message — the [REPLY TO: "..."] shows the message they replied to), and what messages they reacted to, produce a structured buyer persona including sales intelligence.
 
 - Do a thorough, intensive analysis. Use as many tokens as needed for a detailed, evidence-based answer.
 - Do NOT use generic opening phrases like "X is an enthusiastic member of a money-focused community, actively engaging...". The summary must be factual and specific; if little is known, say so briefly.
 - For every inference (topics, content preferences, goals, pain points): when possible, reference the specific message or reaction that supports it (e.g. "Inferred from message on 2026-02-27: '...'" or "Reacts with heart to posts about X — e.g. to '...'").
 - Infer age, occupation, and goals only when there is clear evidence; use null otherwise. Extract social links only if mentioned in bio or messages.
-- The inference_evidence field is required: write 2–5 bullet points or short paragraphs that explain your key inferences and cite the exact message or reaction (quote or describe) that supports each.`;
+- The inference_evidence field is required: write 2–5 bullet points or short paragraphs that explain your key inferences and cite the exact message or reaction (quote or describe) that supports each.
+
+Sales intelligence fields (required — fill for every member):
+- buying_intent_score (0–10): how likely this person is to purchase. 0=no signal, 10=actively asking to buy. Most will score 0–4; reserve 7+ for clear purchase intent signals.
+- buying_signals: specific phrases or behaviors from their messages showing purchase intent. Empty array if none.
+- follow_up_priority: 'hot' (score ≥7 + active), 'warm' (score 4–6 or engaged), 'cold' (low engagement, no signals), 'nurture' (lurker/passive).
+- engagement_level: 'champion' (drives conversations, frequent quality posts), 'active' (regular participation), 'passive' (occasional), 'lurker' (rarely or never posts).
+- outreach_approach: 1–2 sentences — personalized recommendation for how a sales rep should approach this exact person based on their communication style and interests.
+- objection_patterns: likely sales objections inferred from their messages. Empty array if insufficient data.
+- spending_capacity: 'high' (mentions significant purchases or high income signals), 'medium', 'low' (frugal signals), 'unknown' (insufficient data).`;
 
 /** Default user prompt template. Use placeholders: {{bio}}, {{messagesBlob}}, {{repliesBlob}}, {{reactionsBlob}}. Seeded into settings on first use if missing. */
 export const DEFAULT_PERSONA_USER_PROMPT_TEMPLATE = `## Profile / Bio
@@ -111,6 +120,13 @@ export const DEFAULT_PERSONA_SCHEMA_DESCRIPTIONS: Record<string, string> = {
   content_preferences: 'What content they react to; cite specific messages/reactions when inferring (e.g. "Reacts to X — e.g. reacted with heart to \\"...\\"")',
   pain_points: 'Pain points or objections',
   inference_evidence: '2-5 bullet points or short paragraphs: key inferences with explicit references to the message or reaction that supports each (quote or describe the source). Required.',
+  buying_intent_score: 'Integer 0–10. 0=no purchase signal, 10=actively asking to buy. Be conservative; most people score 0–4. Use 7+ only with clear explicit purchase intent.',
+  buying_signals: 'Array of specific phrases, questions, or behaviors showing purchase intent. E.g. ["Asked about pricing on 2026-01-15", "Commented wanting access"]. Empty array if no signals.',
+  follow_up_priority: 'One of: hot (score 7+, actively engaged), warm (score 4-6 or engaged with community), cold (low engagement, no clear signals), nurture (lurker or very passive).',
+  engagement_level: 'One of: champion (frequently posts, drives conversations, high quality), active (regular participation), passive (occasional posts), lurker (rarely or never posts).',
+  outreach_approach: '1-2 sentences: personalized recommendation for a sales rep on how to approach this exact person, referencing their specific interests, communication style, and pain points.',
+  objection_patterns: 'Array of likely sales objections inferred from their communication. E.g. ["Skeptical about pricing", "Prefers free tools"]. Empty array if insufficient data.',
+  spending_capacity: 'One of: high (mentions significant purchases or high income signals), medium, low (frugal signals or cost-sensitive language), unknown (insufficient data).',
 };
 
 export const DEFAULT_UI_PERSONA_LABELS: Record<string, string> = {

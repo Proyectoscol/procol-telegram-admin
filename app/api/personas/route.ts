@@ -24,10 +24,17 @@ export async function GET() {
         cp.inferred_goals,
         cp.pain_points,
         cp.content_preferences,
-        cp.run_at
+        cp.run_at,
+        COALESCE(cp.buying_intent_score, 0)  AS buying_intent_score,
+        cp.buying_signals,
+        cp.follow_up_priority,
+        cp.engagement_level,
+        cp.outreach_approach,
+        cp.objection_patterns,
+        cp.spending_capacity
       FROM users u
       INNER JOIN contact_personas cp ON cp.user_id = u.id
-      ORDER BY u.display_name
+      ORDER BY COALESCE(cp.buying_intent_score, 0) DESC, u.display_name
     `);
     return NextResponse.json(rows);
   } catch (err) {
