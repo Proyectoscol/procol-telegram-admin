@@ -570,13 +570,13 @@ export default function IntelligencePage() {
   const [rows, setRows] = useState<PersonaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<ViewMode>('pipeline');
+  const [view, setView] = useState<ViewMode>('grid');
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [priorityFilter, setPriorityFilter] = useState('');
   const [engagementFilter, setEngagementFilter] = useState('');
   const [search, setSearch] = useState('');
   const [showBatch, setShowBatch] = useState(false);
-  const [showChart, setShowChart] = useState(false);
+  const [showChart, setShowChart] = useState(true);
 
   function loadData() {
     setLoading(true);
