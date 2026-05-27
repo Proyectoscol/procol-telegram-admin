@@ -555,6 +555,9 @@ function BatchModal({ onClose, onComplete }: { onClose: () => void; onComplete: 
               </p>
             )}
             <div className="modal-footer">
+              <button className="btn-ghost" onClick={() => { setStep(1); setBatchStatus(null); setEstimate(null); }}>
+                Run again ↺
+              </button>
               <button className="btn-primary" onClick={() => { onComplete(); onClose(); }}>View Results →</button>
             </div>
           </div>
