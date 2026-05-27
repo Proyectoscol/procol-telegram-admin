@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { upload } from '@vercel/blob/client';
 import { LoadingSpinner } from '@/components/Loading';
 
 export default function ImportPage() {
@@ -81,11 +82,15 @@ export default function ImportPage() {
     setResult(null);
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Upload directly to Vercel Blob to bypass the 4.5MB function payload limit
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/ingest/upload-url',
+      });
       const res = await fetch('/api/ingest', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blobUrl: blob.url }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
