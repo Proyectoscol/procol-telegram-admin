@@ -139,6 +139,13 @@ interface Persona {
   completion_tokens: number | null;
   run_at: string | null;
   generated_for_range?: string | null;
+  buying_intent_score: number | null;
+  buying_signals: string[] | null;
+  follow_up_priority: string | null;
+  engagement_level: string | null;
+  outreach_approach: string | null;
+  objection_patterns: string[] | null;
+  spending_capacity: string | null;
 }
 
 interface TopRelationship {
@@ -792,6 +799,60 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         )}
         {persona && (
           <>
+            {/* Sales intelligence */}
+            {(persona.follow_up_priority || persona.buying_intent_score != null || persona.engagement_level || persona.spending_capacity) && (
+              <div style={{ marginBottom: '1rem', padding: '.85rem 1rem', background: '#0a0a18', borderRadius: 10, border: '1px solid #1e1e32' }}>
+                <span style={{ color: '#8b98a5', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '.6rem' }}>Sales intelligence</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.4rem', marginBottom: persona.buying_intent_score != null ? '.7rem' : 0 }}>
+                  {persona.follow_up_priority && (() => {
+                    const p: Record<string, { label: string; color: string; bg: string; border: string; icon: string }> = {
+                      hot: { label: 'Hot', color: '#ff4757', bg: 'rgba(255,71,87,.12)', border: 'rgba(255,71,87,.35)', icon: '🔥' },
+                      warm: { label: 'Warm', color: '#ffa502', bg: 'rgba(255,165,2,.12)', border: 'rgba(255,165,2,.35)', icon: '⚡' },
+                      cold: { label: 'Cold', color: '#5c6bc0', bg: 'rgba(92,107,192,.12)', border: 'rgba(92,107,192,.35)', icon: '❄️' },
+                      nurture: { label: 'Nurture', color: '#78909c', bg: 'rgba(120,144,156,.12)', border: 'rgba(120,144,156,.35)', icon: '🌱' },
+                    };
+                    const cfg = p[persona.follow_up_priority] ?? p.nurture;
+                    return <span key="p" style={{ borderRadius: 12, padding: '.15rem .6rem', fontSize: '.75rem', fontWeight: 600, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>{cfg.icon} {cfg.label}</span>;
+                  })()}
+                  {persona.engagement_level && (() => {
+                    const e: Record<string, { icon: string; color: string }> = {
+                      champion: { icon: '👑', color: '#ffd700' },
+                      active: { icon: '⚡', color: '#4caf50' },
+                      passive: { icon: '💤', color: '#9e9e9e' },
+                      lurker: { icon: '👁️', color: '#607d8b' },
+                    };
+                    const cfg = e[persona.engagement_level];
+                    return cfg ? <span key="e" style={{ fontSize: '.8rem', color: cfg.color, background: '#111122', border: '1px solid #1e1e32', borderRadius: 8, padding: '.15rem .5rem' }}>{cfg.icon} {persona.engagement_level}</span> : null;
+                  })()}
+                  {persona.spending_capacity && persona.spending_capacity !== 'unknown' && (() => {
+                    const s: Record<string, { label: string; color: string }> = {
+                      high: { label: 'High $$$', color: '#4caf50' },
+                      medium: { label: 'Medium $$', color: '#ff9800' },
+                      low: { label: 'Low $', color: '#9e9e9e' },
+                    };
+                    const cfg = s[persona.spending_capacity];
+                    return cfg ? <span key="s" style={{ fontSize: '.8rem', color: cfg.color, background: '#111122', border: '1px solid #1e1e32', borderRadius: 8, padding: '.15rem .5rem' }}>{cfg.label}</span> : null;
+                  })()}
+                </div>
+                {persona.buying_intent_score != null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+                    <span style={{ fontSize: '.75rem', color: '#8b98a5', flexShrink: 0 }}>Buying intent</span>
+                    <div style={{ flex: 1, height: 5, background: '#1e1e32', borderRadius: 3, overflow: 'hidden', maxWidth: 160 }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${Math.min(100, (persona.buying_intent_score ?? 0) * 10)}%`,
+                        background: (persona.buying_intent_score ?? 0) >= 7 ? '#ff4757' : (persona.buying_intent_score ?? 0) >= 4 ? '#ffa502' : '#5c6bc0',
+                        borderRadius: 3,
+                      }} />
+                    </div>
+                    <span style={{ fontSize: '.78rem', fontWeight: 700, color: (persona.buying_intent_score ?? 0) >= 7 ? '#ff4757' : (persona.buying_intent_score ?? 0) >= 4 ? '#ffa502' : (persona.buying_intent_score ?? 0) >= 1 ? '#5c6bc0' : '#555' }}>
+                      {persona.buying_intent_score}/10
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {persona.summary && (
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{personaLabels.summary}</span>
@@ -839,10 +900,32 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
                 <p style={{ margin: '0.35rem 0 0', lineHeight: 1.5 }}>{persona.content_preferences}</p>
               </div>
             )}
+            {persona.outreach_approach && (
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Outreach approach</span>
+                <p style={{ margin: '0.35rem 0 0', lineHeight: 1.5 }}>💡 {persona.outreach_approach}</p>
+              </div>
+            )}
+            {persona.buying_signals && Array.isArray(persona.buying_signals) && (persona.buying_signals as string[]).length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Buying signals</span>
+                <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem', color: '#4caf50' }}>
+                  {(persona.buying_signals as string[]).map((s) => <li key={s} style={{ marginBottom: '.15rem' }}>🎯 {s}</li>)}
+                </ul>
+              </div>
+            )}
             {persona.pain_points && Array.isArray(persona.pain_points) && (persona.pain_points as string[]).length > 0 && (
               <div style={{ marginBottom: '1rem' }}>
                 <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{personaLabels.painPoints}</span>
                 <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem' }}>{(persona.pain_points as string[]).map((pp) => <li key={pp}>{pp}</li>)}</ul>
+              </div>
+            )}
+            {persona.objection_patterns && Array.isArray(persona.objection_patterns) && (persona.objection_patterns as string[]).length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Objection patterns</span>
+                <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem', color: '#ffa502' }}>
+                  {(persona.objection_patterns as string[]).map((o) => <li key={o} style={{ marginBottom: '.15rem' }}>🛡️ {o}</li>)}
+                </ul>
               </div>
             )}
             {persona.inference_evidence && (

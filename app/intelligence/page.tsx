@@ -132,11 +132,11 @@ function TopicPill({ topic, highlight }: { topic: string; highlight?: boolean })
 
 // ─── Pipeline Card ────────────────────────────────────────────────────────────
 
-function PipelineCard({ row, highlightTopics }: { row: PersonaRow; highlightTopics: Set<string> }) {
+function PipelineCard({ row, highlightTopics, onInfo }: { row: PersonaRow; highlightTopics: Set<string>; onInfo: (row: PersonaRow) => void }) {
   const cfg = PRIORITY_CONFIG[row.follow_up_priority ?? 'nurture'] ?? PRIORITY_CONFIG.nurture;
   const engCfg = ENGAGEMENT_CONFIG[row.engagement_level ?? 'passive'];
   return (
-    <a href={`/users/${row.from_id}`} className="pipeline-card" style={{ borderColor: cfg.border, '--card-bg': cfg.bg } as React.CSSProperties}>
+    <div className="pipeline-card" style={{ borderColor: cfg.border, '--card-bg': cfg.bg, cursor: 'pointer' } as React.CSSProperties} onClick={() => { window.location.href = `/users/${row.from_id}`; }}>
       <div className="pc-header">
         <Avatar row={row} />
         <div className="pc-identity">
@@ -146,11 +146,14 @@ function PipelineCard({ row, highlightTopics }: { row: PersonaRow; highlightTopi
           </div>
           {row.inferred_occupation && <div className="pc-occupation">{row.inferred_occupation}</div>}
         </div>
-        {engCfg && (
-          <span className="eng-icon" title={`Engagement: ${row.engagement_level}`} style={{ color: engCfg.color }}>
-            {engCfg.icon}
-          </span>
-        )}
+        <div className="pc-header-right">
+          {engCfg && (
+            <span className="eng-icon" title={`Engagement: ${row.engagement_level}`} style={{ color: engCfg.color }}>
+              {engCfg.icon}
+            </span>
+          )}
+          <button className="card-info-btn" onClick={(e) => { e.stopPropagation(); onInfo(row); }} title="Quick info">ⓘ</button>
+        </div>
       </div>
 
       <IntentBar score={row.buying_intent_score} />
@@ -177,11 +180,11 @@ function PipelineCard({ row, highlightTopics }: { row: PersonaRow; highlightTopi
           ))}
         </div>
       )}
-    </a>
+    </div>
   );
 }
 
-function PipelineColumn({ priority, rows, highlightTopics }: { priority: string; rows: PersonaRow[]; highlightTopics: Set<string> }) {
+function PipelineColumn({ priority, rows, highlightTopics, onInfo }: { priority: string; rows: PersonaRow[]; highlightTopics: Set<string>; onInfo: (row: PersonaRow) => void }) {
   const cfg = PRIORITY_CONFIG[priority] ?? PRIORITY_CONFIG.nurture;
   return (
     <div className="pipeline-col">
@@ -190,7 +193,7 @@ function PipelineColumn({ priority, rows, highlightTopics }: { priority: string;
         <span className="pipeline-count">{rows.length}</span>
       </div>
       <div className="pipeline-cards">
-        {rows.map((r) => <PipelineCard key={r.id} row={r} highlightTopics={highlightTopics} />)}
+        {rows.map((r) => <PipelineCard key={r.id} row={r} highlightTopics={highlightTopics} onInfo={onInfo} />)}
         {rows.length === 0 && <div className="pipeline-empty">No contacts</div>}
       </div>
     </div>
@@ -199,9 +202,9 @@ function PipelineColumn({ priority, rows, highlightTopics }: { priority: string;
 
 // ─── Grid Card ────────────────────────────────────────────────────────────────
 
-function GridCard({ row, highlightTopics }: { row: PersonaRow; highlightTopics: Set<string> }) {
+function GridCard({ row, highlightTopics, onInfo }: { row: PersonaRow; highlightTopics: Set<string>; onInfo: (row: PersonaRow) => void }) {
   return (
-    <a href={`/users/${row.from_id}`} className="grid-card">
+    <div className="grid-card" onClick={() => { window.location.href = `/users/${row.from_id}`; }}>
       <div className="gc-top">
         <Avatar row={row} />
         <div className="gc-identity">
@@ -212,7 +215,10 @@ function GridCard({ row, highlightTopics }: { row: PersonaRow; highlightTopics: 
           {row.username && <div className="gc-username">@{row.username}</div>}
           {row.inferred_occupation && <div className="gc-occupation">{row.inferred_occupation}</div>}
         </div>
-        <PriorityBadge priority={row.follow_up_priority} />
+        <div className="gc-top-actions">
+          <PriorityBadge priority={row.follow_up_priority} />
+          <button className="card-info-btn" onClick={(e) => { e.stopPropagation(); onInfo(row); }} title="Quick info">ⓘ</button>
+        </div>
       </div>
 
       <IntentBar score={row.buying_intent_score} />
@@ -244,7 +250,7 @@ function GridCard({ row, highlightTopics }: { row: PersonaRow; highlightTopics: 
       {row.outreach_approach && (
         <div className="gc-approach">💡 {row.outreach_approach.slice(0, 130)}{row.outreach_approach.length > 130 ? '…' : ''}</div>
       )}
-    </a>
+    </div>
   );
 }
 
@@ -336,6 +342,134 @@ function TableView({ rows }: { rows: PersonaRow[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ─── Persona Info Modal ───────────────────────────────────────────────────────
+
+function PersonaInfoModal({ row, onClose }: { row: PersonaRow; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const engCfg = ENGAGEMENT_CONFIG[row.engagement_level ?? ''];
+
+  return (
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-box persona-modal">
+        <div className="modal-header">
+          <div className="pm-title-row">
+            <Avatar row={row} />
+            <div style={{ minWidth: 0 }}>
+              <div className="pm-name">
+                {row.display_name}
+                {row.is_premium && <span className="premium-star">★</span>}
+              </div>
+              {row.username && <div className="pm-username">@{row.username}</div>}
+            </div>
+          </div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="pm-body">
+          <div className="pm-signals-row">
+            <PriorityBadge priority={row.follow_up_priority} />
+            {engCfg && (
+              <span className="pm-chip" style={{ color: engCfg.color }}>
+                {engCfg.icon} {row.engagement_level}
+              </span>
+            )}
+            {row.spending_capacity && row.spending_capacity !== 'unknown' && (
+              <span className="pm-chip" style={{ color: SPENDING_CONFIG[row.spending_capacity]?.color ?? '#888' }}>
+                {SPENDING_CONFIG[row.spending_capacity]?.label ?? row.spending_capacity}
+              </span>
+            )}
+            {row.inferred_age_range && <span className="pm-chip">{row.inferred_age_range}</span>}
+          </div>
+
+          {row.inferred_occupation && (
+            <div style={{ fontSize: '.8rem', color: '#7c6af7', marginBottom: '.25rem' }}>{row.inferred_occupation}</div>
+          )}
+
+          <IntentBar score={row.buying_intent_score} />
+
+          {row.summary && (
+            <div className="pm-section">
+              <div className="pm-section-label">Summary</div>
+              <p className="pm-text">{row.summary}</p>
+            </div>
+          )}
+
+          {(row.topics ?? []).length > 0 && (
+            <div className="pm-section">
+              <div className="pm-section-label">Topics</div>
+              <div className="pm-chips">
+                {(row.topics ?? []).map((t) => <TopicPill key={t} topic={t} />)}
+              </div>
+            </div>
+          )}
+
+          {row.outreach_approach && (
+            <div className="pm-section">
+              <div className="pm-section-label">Outreach approach</div>
+              <p className="pm-text">💡 {row.outreach_approach}</p>
+            </div>
+          )}
+
+          {(row.buying_signals ?? []).length > 0 && (
+            <div className="pm-section">
+              <div className="pm-section-label">Buying signals</div>
+              {(row.buying_signals ?? []).map((s, i) => (
+                <div key={i} className="pm-list-item" style={{ color: '#4caf50' }}>🎯 {s}</div>
+              ))}
+            </div>
+          )}
+
+          {(row.inferred_goals ?? []).length > 0 && (
+            <div className="pm-section">
+              <div className="pm-section-label">Goals</div>
+              <div className="pm-chips">
+                {(row.inferred_goals ?? []).map((g, i) => <span key={i} className="topic-pill">{g}</span>)}
+              </div>
+            </div>
+          )}
+
+          {(row.pain_points ?? []).length > 0 && (
+            <div className="pm-section">
+              <div className="pm-section-label">Pain points</div>
+              {(row.pain_points ?? []).map((p, i) => (
+                <div key={i} className="pm-list-item">⚠️ {p}</div>
+              ))}
+            </div>
+          )}
+
+          {(row.objection_patterns ?? []).length > 0 && (
+            <div className="pm-section">
+              <div className="pm-section-label">Objection patterns</div>
+              {(row.objection_patterns ?? []).map((o, i) => (
+                <div key={i} className="pm-list-item" style={{ color: '#ffa502' }}>🛡️ {o}</div>
+              ))}
+            </div>
+          )}
+
+          {row.content_preferences && (
+            <div className="pm-section">
+              <div className="pm-section-label">Content preferences</div>
+              <p className="pm-text">{row.content_preferences}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="pm-footer">
+          <span className="pm-meta">{row.run_at ? `Analyzed ${new Date(row.run_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}</span>
+          <a href={`/users/${row.from_id}`} className="btn-primary" style={{ textDecoration: 'none', fontSize: '.84rem', padding: '.5rem 1rem' }}>
+            View full profile →
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
@@ -584,6 +718,7 @@ export default function IntelligencePage() {
   const [search, setSearch] = useState('');
   const [showBatch, setShowBatch] = useState(false);
   const [showChart, setShowChart] = useState(true);
+  const [infoPersona, setInfoPersona] = useState<PersonaRow | null>(null);
 
   function loadData() {
     setLoading(true);
@@ -827,20 +962,24 @@ export default function IntelligencePage() {
           {view === 'pipeline' && (
             <div className="pipeline-board">
               {(['hot', 'warm', 'cold', 'nurture'] as const).map((p) => (
-                <PipelineColumn key={p} priority={p} rows={pipelineGroups[p]} highlightTopics={selectedTopics} />
+                <PipelineColumn key={p} priority={p} rows={pipelineGroups[p]} highlightTopics={selectedTopics} onInfo={setInfoPersona} />
               ))}
             </div>
           )}
 
           {view === 'grid' && (
             <div className="grid-board">
-              {filtered.map((row) => <GridCard key={row.id} row={row} highlightTopics={selectedTopics} />)}
+              {filtered.map((row) => <GridCard key={row.id} row={row} highlightTopics={selectedTopics} onInfo={setInfoPersona} />)}
               {filtered.length === 0 && <div className="no-match">No profiles match the current filters.</div>}
             </div>
           )}
 
           {view === 'table' && <TableView rows={filtered} />}
         </>
+      )}
+
+      {infoPersona && (
+        <PersonaInfoModal row={infoPersona} onClose={() => setInfoPersona(null)} />
       )}
 
       {showBatch && (
@@ -1012,6 +1151,29 @@ export default function IntelligencePage() {
         .btn-ghost:hover { color: #fff; border-color: #444; }
         .btn-danger { background: rgba(255,71,87,.15); border: 1px solid rgba(255,71,87,.4); color: #ff4757; border-radius: 8px; padding: .6rem 1.2rem; font-size: .88rem; cursor: pointer; font-weight: 600; }
         .btn-danger:hover { background: rgba(255,71,87,.25); }
+
+        /* Card info button */
+        .gc-top-actions { display: flex; flex-direction: column; gap: .3rem; align-items: flex-end; flex-shrink: 0; }
+        .pc-header-right { display: flex; flex-direction: column; gap: .2rem; align-items: center; }
+        .card-info-btn { background: rgba(124,106,247,.1); border: 1px solid rgba(124,106,247,.2); border-radius: 5px; color: #7c6af7; font-size: .72rem; cursor: pointer; padding: .18rem .45rem; line-height: 1.3; opacity: 0; transition: opacity .15s; white-space: nowrap; font-style: normal; }
+        .grid-card:hover .card-info-btn, .pipeline-card:hover .card-info-btn { opacity: 1; }
+        .card-info-btn:hover { background: rgba(124,106,247,.25) !important; opacity: 1 !important; }
+
+        /* Persona info modal */
+        .persona-modal { max-width: 560px; max-height: 88vh; display: flex; flex-direction: column; }
+        .pm-title-row { display: flex; gap: .75rem; align-items: center; min-width: 0; flex: 1; overflow: hidden; }
+        .pm-name { font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pm-username { font-size: .78rem; color: #555; }
+        .pm-body { overflow-y: auto; padding: 1rem 1.5rem 1.25rem; display: flex; flex-direction: column; gap: .85rem; flex: 1; }
+        .pm-signals-row { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+        .pm-chip { font-size: .78rem; color: #888; background: #111122; border: 1px solid #1e1e32; border-radius: 8px; padding: .15rem .5rem; }
+        .pm-section { display: flex; flex-direction: column; gap: .3rem; }
+        .pm-section-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: #555; font-weight: 600; }
+        .pm-text { margin: 0; font-size: .83rem; color: #ccc; line-height: 1.55; }
+        .pm-chips { display: flex; flex-wrap: wrap; gap: .25rem; }
+        .pm-list-item { font-size: .81rem; line-height: 1.45; color: #aaa; padding: .08rem 0; }
+        .pm-footer { display: flex; justify-content: space-between; align-items: center; padding: .85rem 1.5rem; border-top: 1px solid #1e1e32; flex-shrink: 0; gap: .75rem; }
+        .pm-meta { font-size: .72rem; color: #444; }
       `}</style>
     </div>
   );
