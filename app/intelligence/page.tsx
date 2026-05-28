@@ -577,6 +577,10 @@ export default function IntelligencePage() {
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [priorityFilter, setPriorityFilter] = useState('');
   const [engagementFilter, setEngagementFilter] = useState('');
+  const [spendingFilter, setSpendingFilter] = useState('');
+  const [intentFilter, setIntentFilter] = useState('');
+  const [premiumFilter, setPremiumFilter] = useState('');
+  const [ageFilter, setAgeFilter] = useState('');
   const [search, setSearch] = useState('');
   const [showBatch, setShowBatch] = useState(false);
   const [showChart, setShowChart] = useState(true);
@@ -601,10 +605,24 @@ export default function IntelligencePage() {
     return Array.from(map.entries()).map(([topic, count]) => ({ topic, count })).sort((a, b) => b.count - a.count).slice(0, 20);
   }, [rows]);
 
+  const uniqueAgeRanges = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of rows) if (r.inferred_age_range) seen.add(r.inferred_age_range);
+    return Array.from(seen).sort();
+  }, [rows]);
+
   const filtered = useMemo(() => {
     let list = rows;
     if (priorityFilter) list = list.filter((r) => (r.follow_up_priority ?? 'nurture') === priorityFilter);
     if (engagementFilter) list = list.filter((r) => (r.engagement_level ?? 'passive') === engagementFilter);
+    if (spendingFilter) list = list.filter((r) => (r.spending_capacity ?? 'unknown') === spendingFilter);
+    if (premiumFilter === 'premium') list = list.filter((r) => r.is_premium);
+    if (premiumFilter === 'non_premium') list = list.filter((r) => !r.is_premium);
+    if (ageFilter) list = list.filter((r) => r.inferred_age_range === ageFilter);
+    if (intentFilter === 'high') list = list.filter((r) => (r.buying_intent_score ?? 0) >= 7);
+    if (intentFilter === 'medium') list = list.filter((r) => { const s = r.buying_intent_score ?? 0; return s >= 4 && s <= 6; });
+    if (intentFilter === 'low') list = list.filter((r) => { const s = r.buying_intent_score ?? 0; return s >= 1 && s <= 3; });
+    if (intentFilter === 'none') list = list.filter((r) => (r.buying_intent_score ?? 0) === 0);
     if (selectedTopics.size > 0) list = list.filter((r) => (r.topics ?? []).some((t) => selectedTopics.has(t)));
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -617,7 +635,7 @@ export default function IntelligencePage() {
       );
     }
     return list;
-  }, [rows, priorityFilter, engagementFilter, selectedTopics, search]);
+  }, [rows, priorityFilter, engagementFilter, spendingFilter, premiumFilter, ageFilter, intentFilter, selectedTopics, search]);
 
   const stats = useMemo(() => ({
     total: rows.length,
@@ -647,10 +665,14 @@ export default function IntelligencePage() {
     setSelectedTopics(new Set());
     setPriorityFilter('');
     setEngagementFilter('');
+    setSpendingFilter('');
+    setIntentFilter('');
+    setPremiumFilter('');
+    setAgeFilter('');
     setSearch('');
   }
 
-  const hasFilters = selectedTopics.size > 0 || priorityFilter || engagementFilter || search;
+  const hasFilters = selectedTopics.size > 0 || priorityFilter || engagementFilter || spendingFilter || intentFilter || premiumFilter || ageFilter || search;
 
   if (loading) return <div className="page-loading">Loading intelligence data…</div>;
   if (error) return <div className="page-error">Error: {error}</div>;
@@ -693,19 +715,42 @@ export default function IntelligencePage() {
         <>
           {/* Controls bar */}
           <div className="controls-bar">
-            <div className="view-tabs">
-              {(['pipeline', 'grid', 'table'] as ViewMode[]).map((v) => (
-                <button key={v} className={`view-tab${view === v ? ' active' : ''}`} onClick={() => setView(v)}>
-                  {v === 'pipeline' ? '📊 Pipeline' : v === 'grid' ? '⊞ Grid' : '≡ Table'}
+            <div className="controls-row1">
+              <div className="view-tabs">
+                {(['pipeline', 'grid', 'table'] as ViewMode[]).map((v) => (
+                  <button key={v} className={`view-tab${view === v ? ' active' : ''}`} onClick={() => setView(v)}>
+                    {v === 'pipeline' ? '📊 Pipeline' : v === 'grid' ? '⊞ Grid' : '≡ Table'}
+                  </button>
+                ))}
+              </div>
+              <input
+                className="filter-search"
+                placeholder="Search name, occupation, summary…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <button className="btn-chart-toggle" onClick={() => setShowChart((s) => !s)}>
+                {showChart ? '▲ Hide chart' : '▼ Topics'}
+              </button>
+              {hasFilters && (
+                <button className="btn-clear" onClick={clearFilters}>
+                  Clear all ✕
                 </button>
-              ))}
+              )}
             </div>
-            <div className="filters-wrap">
+            <div className="controls-row2">
               <select className="filter-select" value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
                 <option value="">All priorities</option>
                 {Object.entries(PRIORITY_CONFIG).map(([k, cfg]) => (
                   <option key={k} value={k}>{cfg.icon} {cfg.label}</option>
                 ))}
+              </select>
+              <select className="filter-select" value={intentFilter} onChange={(e) => setIntentFilter(e.target.value)}>
+                <option value="">All intent scores</option>
+                <option value="high">🔥 High intent (7–10)</option>
+                <option value="medium">⚡ Medium intent (4–6)</option>
+                <option value="low">❄️ Low intent (1–3)</option>
+                <option value="none">No signal (0)</option>
               </select>
               <select className="filter-select" value={engagementFilter} onChange={(e) => setEngagementFilter(e.target.value)}>
                 <option value="">All engagement</option>
@@ -713,17 +758,31 @@ export default function IntelligencePage() {
                   <option key={k} value={k}>{cfg.icon} {k}</option>
                 ))}
               </select>
-              <input
-                className="filter-search"
-                placeholder="Search…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {hasFilters && <button className="btn-clear" onClick={clearFilters}>Clear</button>}
+              <select className="filter-select" value={spendingFilter} onChange={(e) => setSpendingFilter(e.target.value)}>
+                <option value="">All spending</option>
+                {Object.entries(SPENDING_CONFIG).map(([k, cfg]) => (
+                  <option key={k} value={k}>{cfg.label}</option>
+                ))}
+              </select>
+              <select className="filter-select" value={premiumFilter} onChange={(e) => setPremiumFilter(e.target.value)}>
+                <option value="">All members</option>
+                <option value="premium">✨ Premium only</option>
+                <option value="non_premium">Non-premium only</option>
+              </select>
+              {uniqueAgeRanges.length > 0 && (
+                <select className="filter-select" value={ageFilter} onChange={(e) => setAgeFilter(e.target.value)}>
+                  <option value="">All ages</option>
+                  {uniqueAgeRanges.map((a) => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              )}
+              {hasFilters && (
+                <span className="filter-count">
+                  {filtered.length} of {rows.length} shown
+                </span>
+              )}
             </div>
-            <button className="btn-chart-toggle" onClick={() => setShowChart((s) => !s)}>
-              {showChart ? '▲ Hide chart' : '▼ Topic chart'}
-            </button>
           </div>
 
           {/* Topic chart */}
@@ -814,18 +873,21 @@ export default function IntelligencePage() {
         .empty-state h2 { margin: 0 0 .5rem; }
         .empty-state p { color: #888; margin-bottom: 1.5rem; }
 
-        .controls-bar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
-        .view-tabs { display: flex; gap: .25rem; background: #111122; border: 1px solid #1e1e32; border-radius: 8px; padding: .25rem; }
+        .controls-bar { display: flex; flex-direction: column; gap: .6rem; margin-bottom: 1rem; }
+        .controls-row1 { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+        .controls-row2 { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+        .view-tabs { display: flex; gap: .25rem; background: #111122; border: 1px solid #1e1e32; border-radius: 8px; padding: .25rem; flex-shrink: 0; }
         .view-tab { background: transparent; border: none; border-radius: 6px; padding: .4rem .8rem; color: #666; font-size: .85rem; cursor: pointer; }
         .view-tab.active { background: #7c6af7; color: #fff; font-weight: 600; }
-        .filters-wrap { display: flex; gap: .5rem; align-items: center; flex: 1; flex-wrap: wrap; }
-        .filter-select { background: #111122; border: 1px solid #1e1e32; border-radius: 6px; color: #ccc; padding: .4rem .6rem; font-size: .83rem; cursor: pointer; }
-        .filter-search { background: #111122; border: 1px solid #1e1e32; border-radius: 6px; color: #fff; padding: .4rem .75rem; font-size: .83rem; outline: none; width: 200px; }
+        .filter-select { background: #111122; border: 1px solid #1e1e32; border-radius: 6px; color: #ccc; padding: .4rem .6rem; font-size: .82rem; cursor: pointer; }
+        .filter-select:focus { outline: none; border-color: #7c6af7; }
+        .filter-search { background: #111122; border: 1px solid #1e1e32; border-radius: 6px; color: #fff; padding: .4rem .75rem; font-size: .83rem; outline: none; flex: 1; min-width: 180px; }
         .filter-search:focus { border-color: #7c6af7; }
-        .btn-clear { background: transparent; border: 1px solid #333; border-radius: 6px; color: #888; padding: .35rem .65rem; font-size: .78rem; cursor: pointer; }
-        .btn-clear:hover { color: #fff; border-color: #666; }
-        .btn-chart-toggle { background: transparent; border: 1px solid #1e1e32; border-radius: 6px; color: #666; padding: .35rem .65rem; font-size: .78rem; cursor: pointer; white-space: nowrap; }
+        .btn-clear { background: transparent; border: 1px solid #333; border-radius: 6px; color: #ff6b6b; padding: .35rem .65rem; font-size: .78rem; cursor: pointer; white-space: nowrap; }
+        .btn-clear:hover { background: rgba(255,107,107,.1); border-color: #ff6b6b; }
+        .btn-chart-toggle { background: transparent; border: 1px solid #1e1e32; border-radius: 6px; color: #666; padding: .35rem .65rem; font-size: .78rem; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
         .btn-chart-toggle:hover { color: #ccc; }
+        .filter-count { font-size: .78rem; color: #7c6af7; white-space: nowrap; margin-left: .25rem; font-weight: 600; }
 
         .chart-section { background: #0d0d1a; border: 1px solid #1e1e32; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
         .chart-wrap { margin-bottom: .75rem; }
