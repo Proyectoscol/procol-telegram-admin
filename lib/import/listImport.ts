@@ -88,7 +88,12 @@ export function parseMemberRows(text: string): MemberRow[] {
   let start = 0;
   let cols: Record<string, number> | null = null;
   const first = splitLine(lines[0]).map((s) => s.toLowerCase());
+  // A single pasted line is always data — there'd be nothing left to import
+  // otherwise. Without this, a lone row whose free-text field happens to
+  // contain a column-name-like word (e.g. "note") gets misread as a header
+  // and silently produces zero rows.
   const headerish =
+    lines.length > 1 &&
     first.some((c) => /e-?mail|username|name|note|amount|price|paid|id|handle/.test(c)) &&
     !first.some((c) => looksLikeId(c) || EMAIL_RE.test(c));
   if (headerish) {
