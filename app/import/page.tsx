@@ -141,6 +141,7 @@ export default function ImportPage() {
     tagged: number;
     unmatched: number;
     skipped: number;
+    noChange: number;
     errors: string[];
   } | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -679,6 +680,11 @@ export default function ImportPage() {
             Import complete. Updated: <strong>{listApplyResult.updated}</strong> (tagged: {listApplyResult.tagged}),
             sent to review: <strong>{listApplyResult.unmatched}</strong>, skipped: {listApplyResult.skipped}, total
             rows: {listApplyResult.total}.
+            {listApplyResult.noChange > 0 && (
+              <span> {listApplyResult.noChange} row(s) matched a member but had nothing to apply — for a
+              &quot;General member update&quot; note, add a header row (e.g. <code>name,notes</code>) so the notes
+              column is recognized.</span>
+            )}
             {listApplyResult.unmatched > 0 && (
               <span> Resolve the unmatched rows in the <a href="/review-queue">Review Queue</a>.</span>
             )}

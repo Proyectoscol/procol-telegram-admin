@@ -74,6 +74,8 @@ export interface ListSummary {
   tagged: number;
   unmatched: number;
   skipped: number;
+  /** Matched a member but the row had nothing to apply (e.g. a header-less notes field). */
+  noChange: number;
   errors: string[];
   batchId: number;
 }
@@ -138,10 +140,16 @@ export const isEmptyRow = isEmptyIdentity;
 
 // ── Applying rules ─────────────────────────────────────────────────────────
 
-/** Apply a list-import type's rules (tag/offer/payment/email/notes) to a member. Used directly and by the review-queue dispatcher. */
-export async function applyTypeRules(userId: number, typeId: string, row: MemberRow): Promise<void> {
+/**
+ * Apply a list-import type's rules (tag/offer/payment/email/notes) to a member.
+ * Used directly and by the review-queue dispatcher. Returns whether anything
+ * was actually written — a row with a header-less "notes" field (there's no
+ * positional heuristic to find free text; add a header row like
+ * "name,notes" to capture it) can match a member but have nothing to apply.
+ */
+export async function applyTypeRules(userId: number, typeId: string, row: MemberRow): Promise<boolean> {
   const cfg = getImportType(typeId);
-  if (!cfg) return;
+  if (!cfg) return false;
 
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -166,7 +174,7 @@ export async function applyTypeRules(userId: number, typeId: string, row: Member
     sets.push(`tags = (SELECT COALESCE(jsonb_agg(DISTINCT t), '[]'::jsonb) FROM jsonb_array_elements_text(tags || $${params.length}::jsonb) AS t)`);
   }
 
-  if (sets.length === 0) return;
+  if (sets.length === 0) return false;
   params.push(userId);
   await pool.query(`UPDATE users SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${params.length}`, params);
 
@@ -174,6 +182,7 @@ export async function applyTypeRules(userId: number, typeId: string, row: Member
     description: row.notes ?? undefined,
     source: 'list_import',
   });
+  return true;
 }
 
 // ── Preview + apply ──────────────────────────────────────────────────────
@@ -212,6 +221,7 @@ export async function applyList(typeId: string, text: string, fileName: string):
   let tagged = 0;
   let unmatched = 0;
   let skipped = 0;
+  let noChange = 0;
   const errors: string[] = [];
   const touched = new Set<number>();
 
@@ -229,10 +239,14 @@ export async function applyList(typeId: string, text: string, fileName: string):
     const m = matchIdentity(row, idx);
     if (m.user) {
       try {
-        await applyTypeRules(m.user.id, typeId, row);
-        touched.add(m.user.id);
-        updated++;
-        if (cfg?.tag) tagged++;
+        const wrote = await applyTypeRules(m.user.id, typeId, row);
+        if (wrote) {
+          touched.add(m.user.id);
+          updated++;
+          if (cfg?.tag) tagged++;
+        } else {
+          noChange++;
+        }
       } catch (e) {
         errors.push(`${row.name ?? row.username ?? row.email}: ${(e as Error).message}`);
       }
@@ -249,5 +263,5 @@ export async function applyList(typeId: string, text: string, fileName: string):
 
   if (touched.size) await recomputeOpportunities(Array.from(touched));
 
-  return { total: rows.length, updated, tagged, unmatched, skipped, errors, batchId };
+  return { total: rows.length, updated, tagged, unmatched, skipped, noChange, errors, batchId };
 }

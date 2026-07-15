@@ -357,6 +357,20 @@ td a:hover {
   color: #536471;
 }
 
+.badge-risk {
+  background: rgba(249, 24, 84, 0.15);
+  color: #f91854;
+  border: 1px solid rgba(249, 24, 84, 0.35);
+  font-weight: 600;
+}
+
+.badge-warn {
+  background: rgba(255, 165, 0, 0.15);
+  color: #f90;
+  border: 1px solid rgba(255, 165, 0, 0.35);
+  font-weight: 600;
+}
+
 .form-group {
   margin-bottom: 1rem;
 }

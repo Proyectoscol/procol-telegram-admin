@@ -31,16 +31,51 @@ interface Board {
   lastCalculated: string | null;
 }
 
+function scoreBadgeClass(score: number): string {
+  if (score >= 80) return 'badge-risk';
+  if (score >= 60) return 'badge-warn';
+  return 'badge-default';
+}
+
+function ToggleSwitch({ on, onChange, label }: { on: boolean; onChange: (next: boolean) => void; label: string }) {
+  return (
+    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#8b98a5', cursor: 'pointer' }}>
+      <span
+        className="toggle-switch"
+        data-on={on}
+        role="switch"
+        aria-checked={on}
+        tabIndex={0}
+        onClick={() => onChange(!on)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onChange(!on);
+          }
+        }}
+      >
+        <span className="toggle-switch-thumb" />
+      </span>
+      {label}
+    </label>
+  );
+}
+
 export function OpportunityBoard() {
   const [board, setBoard] = useState<Board | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recomputing, setRecomputing] = useState(false);
+  const [mining, setMining] = useState(false);
+  const [mineResult, setMineResult] = useState<{ membersScanned: number; eventsCreated: number } | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
+  const [activeOnly, setActiveOnly] = useState(true);
+  const [premiumOnly, setPremiumOnly] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch('/api/opportunities')
+    const params = new URLSearchParams({ active: String(activeOnly), premium: String(premiumOnly) });
+    fetch(`/api/opportunities?${params}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
@@ -49,7 +84,7 @@ export function OpportunityBoard() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load opportunities'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeOnly, premiumOnly]);
 
   useEffect(() => {
     load();
@@ -67,6 +102,22 @@ export function OpportunityBoard() {
       setError(e instanceof Error ? e.message : 'Failed to recalculate');
     } finally {
       setRecomputing(false);
+    }
+  };
+
+  const mineTimelines = async () => {
+    setMining(true);
+    setError(null);
+    setMineResult(null);
+    try {
+      const res = await fetch('/api/members/mine-timelines', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mine timelines');
+      setMineResult(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to mine timelines');
+    } finally {
+      setMining(false);
     }
   };
 
@@ -110,24 +161,44 @@ export function OpportunityBoard() {
   return (
     <>
       <div className="filters" style={{ justifyContent: 'space-between' }}>
-        <div style={{ fontSize: '0.9375rem' }}>
-          <strong>{board.totalOpen}</strong> open opportunit{board.totalOpen === 1 ? 'y' : 'ies'}
-          {board.lastCalculated && (
-            <span style={{ color: '#8b98a5', marginLeft: '0.75rem', fontSize: '0.8125rem' }}>
-              Last calculated {new Date(board.lastCalculated).toLocaleString('en-US')}
-            </span>
-          )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ fontSize: '0.9375rem' }}>
+            <strong>{board.totalOpen}</strong> open opportunit{board.totalOpen === 1 ? 'y' : 'ies'}
+            {board.lastCalculated && (
+              <span style={{ color: '#8b98a5', marginLeft: '0.75rem', fontSize: '0.8125rem' }}>
+                Last calculated {new Date(board.lastCalculated).toLocaleString('en-US')}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
+            <ToggleSwitch on={activeOnly} onChange={setActiveOnly} label="Active members only" />
+            <ToggleSwitch on={premiumOnly} onChange={setPremiumOnly} label="Premium members only" />
+          </div>
         </div>
-        <button type="button" className="btn btn-primary" onClick={recompute} disabled={recomputing}>
-          {recomputing ? 'Recalculating…' : 'Recalculate'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button type="button" className="btn btn-secondary" onClick={mineTimelines} disabled={mining}>
+            {mining ? 'Mining…' : 'Mine timelines from messages'}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={recompute} disabled={recomputing}>
+            {recomputing ? 'Recalculating…' : 'Recalculate'}
+          </button>
+        </div>
       </div>
+
+      {mineResult && (
+        <div className="alert alert-success">
+          Scanned messages for <strong>{mineResult.membersScanned}</strong> member(s), logged{' '}
+          <strong>{mineResult.eventsCreated}</strong> new timeline event(s) (first messages, goals, wins, problems,
+          dollar amounts mentioned). Re-running never duplicates — check each member&apos;s Timeline.
+        </div>
+      )}
 
       {error && <div className="alert alert-error">{error}</div>}
 
       {activeCategories.length === 0 ? (
         <div className="card">
-          No open opportunities. Run Recalculate after new activity, imports, wins, or roadmap changes.
+          No open opportunities for this filter. Try toggling &quot;Active members only&quot; / &quot;Premium members
+          only&quot;, or run Recalculate after new activity, imports, wins, or roadmap changes.
         </div>
       ) : (
         activeCategories.map((cat) => (
@@ -160,10 +231,12 @@ export function OpportunityBoard() {
                         </a>
                         {card.isPremium && <span className="badge badge-premium">Premium</span>}
                         {!card.isCurrentMember && <span className="badge badge-muted">Not a member</span>}
-                        <span className="badge badge-default">Score {card.score}</span>
+                        <span className={`badge ${scoreBadgeClass(card.score)}`}>Score {card.score}</span>
                       </div>
                       {card.reason && (
-                        <div style={{ fontSize: '0.875rem', color: '#e7e9ea', marginTop: '0.25rem' }}>{card.reason}</div>
+                        <div style={{ fontSize: '0.9375rem', color: '#e7e9ea', marginTop: '0.3rem', fontWeight: 500 }}>
+                          {card.reason}
+                        </div>
                       )}
                       {card.recommendedAction && (
                         <div style={{ fontSize: '0.8125rem', color: '#8b98a5', marginTop: '0.15rem' }}>

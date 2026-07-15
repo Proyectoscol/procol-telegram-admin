@@ -44,16 +44,30 @@ interface OpportunityRow {
   is_current_member: boolean | null;
 }
 
+export interface OpportunityBoardFilters {
+  includeDone?: boolean;
+  /** Only members currently in the community. Defaults to true. */
+  activeOnly?: boolean;
+  /** Only Premium members. Defaults to false — independent of activeOnly. */
+  premiumOnly?: boolean;
+}
+
 /** The Opportunity Engine board: every open (not-done) opportunity, grouped by category. */
-export async function getOpportunityBoard(includeDone = false): Promise<OpportunityBoard> {
+export async function getOpportunityBoard(filters: OpportunityBoardFilters = {}): Promise<OpportunityBoard> {
+  const { includeDone = false, activeOnly = true, premiumOnly = false } = filters;
   await ensureSchema();
+
+  const conditions = ['o.category IS NOT NULL'];
+  if (!includeDone) conditions.push('o.done_at IS NULL');
+  if (activeOnly) conditions.push('u.is_current_member = TRUE');
+  if (premiumOnly) conditions.push('u.is_premium = TRUE');
 
   const result = await queryWithRetry<OpportunityRow>(
     `SELECT o.user_id, o.score, o.category, o.reason, o.recommended_action, o.done_at, o.last_calculated,
             u.from_id, u.display_name, u.username, u.is_premium, u.is_current_member
      FROM opportunity_scores o
      JOIN users u ON u.id = o.user_id
-     WHERE o.category IS NOT NULL ${includeDone ? '' : 'AND o.done_at IS NULL'}
+     WHERE ${conditions.join(' AND ')}
      ORDER BY o.category, o.score DESC`
   );
 
