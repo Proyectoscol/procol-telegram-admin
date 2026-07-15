@@ -65,5 +65,7 @@ export const config = {
     '/intelligence',
     '/settings',
     '/users/:path*',
+    '/analytics',
+    '/review-queue',
   ],
 };

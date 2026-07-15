@@ -15,3 +15,4 @@ scripts/users-list-import.sql
 **/telegram*statistics*.xlsx
 **/estadisticas*.xlsx
 .vercel
+.gstack/
