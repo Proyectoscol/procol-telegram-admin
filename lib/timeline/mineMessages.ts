@@ -118,9 +118,16 @@ async function buildMinedEvents(fromIdFilter?: string[]): Promise<MinedEvent[]> 
     const dedupeKey = `${userId}:${messageKey}`;
     const textLower = row.text.toLowerCase();
 
-    // First message ever seen for this member (messages are ordered by date ASC per from_id).
-    if (!firstMessageLogged.has(userId) && !alreadyMined.has(dedupeKey)) {
-      firstMessageLogged.add(userId);
+    // Messages are ordered by date ASC per from_id, so the first row we see
+    // for a user is their true first message — mark it regardless of mined
+    // status so later messages are never mistaken for "first message" just
+    // because the real first one was already logged in a prior run.
+    const isFirstForUser = !firstMessageLogged.has(userId);
+    if (isFirstForUser) firstMessageLogged.add(userId);
+
+    if (alreadyMined.has(dedupeKey)) continue;
+
+    if (isFirstForUser) {
       events.push({
         userId,
         eventType: 'JOINED',
@@ -132,7 +139,6 @@ async function buildMinedEvents(fromIdFilter?: string[]): Promise<MinedEvent[]> 
       countByUser.set(userId, count + 1);
       continue;
     }
-    if (alreadyMined.has(dedupeKey)) continue;
 
     const winMatch = matchesAny(textLower, WIN_PATTERNS);
     const goalMatch = !winMatch && matchesAny(textLower, GOAL_PATTERNS);
