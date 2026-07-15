@@ -319,6 +319,8 @@ export async function recomputeOpportunities(userIds?: number[]): Promise<number
 
   const daysSince = (d: Date | null) => (d ? (nowMs - d.getTime()) / DAY_MS : null);
 
+  const rowsToWrite: { userId: number; score: number; category: string | null; reason: string | null; recommendedAction: string | null; doneAt: string | null }[] = [];
+
   for (const u of users) {
     const tags = new Set<string>(Array.isArray(u.tags) ? u.tags : []);
     const activity = u.from_id ? activityMap.get(u.from_id) : undefined;
@@ -358,12 +360,38 @@ export async function recomputeOpportunities(userIds?: number[]): Promise<number
     const sameOpportunity = !!prev && prev.category === category && prev.reason === reason;
     const doneAt = sameOpportunity ? prev!.done_at : null;
 
+    rowsToWrite.push({
+      userId: u.id,
+      score: match?.score ?? 0,
+      category,
+      reason,
+      recommendedAction: match?.recommendedAction ?? null,
+      doneAt,
+    });
+  }
+
+  // One bulk upsert instead of one query per member — thousands of sequential
+  // round-trips over a pooled serverless connection took 3+ minutes in
+  // practice; this does the whole batch in a single round-trip.
+  const BATCH_SIZE = 500;
+  for (let i = 0; i < rowsToWrite.length; i += BATCH_SIZE) {
+    const batch = rowsToWrite.slice(i, i + BATCH_SIZE);
     await queryWithRetry(
       `INSERT INTO opportunity_scores (user_id, score, category, reason, recommended_action, done_at, last_calculated)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       SELECT b.user_id, b.score, b.category, b.reason, b.recommended_action, b.done_at, NOW()
+       FROM unnest($1::int[], $2::int[], $3::text[], $4::text[], $5::text[], $6::timestamptz[])
+         AS b(user_id, score, category, reason, recommended_action, done_at)
        ON CONFLICT (user_id) DO UPDATE SET
-         score = $2, category = $3, reason = $4, recommended_action = $5, done_at = $6, last_calculated = NOW()`,
-      [u.id, match?.score ?? 0, category, reason, match?.recommendedAction ?? null, doneAt]
+         score = EXCLUDED.score, category = EXCLUDED.category, reason = EXCLUDED.reason,
+         recommended_action = EXCLUDED.recommended_action, done_at = EXCLUDED.done_at, last_calculated = NOW()`,
+      [
+        batch.map((r) => r.userId),
+        batch.map((r) => r.score),
+        batch.map((r) => r.category),
+        batch.map((r) => r.reason),
+        batch.map((r) => r.recommendedAction),
+        batch.map((r) => r.doneAt),
+      ]
     );
   }
 
