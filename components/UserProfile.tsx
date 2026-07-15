@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChatSelector } from '@/components/ChatSelector';
 import { LoadingCard, LoadingSpinner } from '@/components/Loading';
+import { MemberCrm } from '@/components/MemberCrm';
 
 interface UserProfileProps {
   fromId?: string;
@@ -52,11 +53,16 @@ interface UserDetail {
   };
   calls: {
     id: number;
-    call_number: number;
+    call_number: number | null;
     called_at: string | null;
     notes: string | null;
     objections: string | null;
     plans_discussed: string | null;
+    current_situation?: string | null;
+    next_step?: string | null;
+    offer_discussed?: string | null;
+    likelihood?: number | null;
+    follow_up_date?: string | null;
     created_by: string | null;
     created_at: string;
   }[];
@@ -180,10 +186,14 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
   const [saving, setSaving] = useState(false);
   const [showCallForm, setShowCallForm] = useState(false);
   const [callForm, setCallForm] = useState({
-    call_number: 1,
     notes: '',
     objections: '',
     plans_discussed: '',
+    current_situation: '',
+    next_step: '',
+    offer_discussed: '',
+    likelihood: '',
+    follow_up_date: '',
     created_by: '',
   });
   const [persona, setPersona] = useState<Persona | null>(null);
@@ -512,14 +522,25 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...callForm,
+          likelihood: callForm.likelihood ? Number(callForm.likelihood) : null,
           called_at: new Date().toISOString(),
         }),
       });
       if (!res.ok) throw new Error('Failed to log call');
       const newCall = await res.json();
-      setUser((u) => (u ? { ...u, calls: [...u.calls, newCall].sort((a, b) => a.call_number - b.call_number) } : null));
+      setUser((u) => (u ? { ...u, calls: [newCall, ...u.calls] } : null));
       setShowCallForm(false);
-      setCallForm({ call_number: 1, notes: '', objections: '', plans_discussed: '', created_by: '' });
+      setCallForm({
+        notes: '',
+        objections: '',
+        plans_discussed: '',
+        current_situation: '',
+        next_step: '',
+        offer_discussed: '',
+        likelihood: '',
+        follow_up_date: '',
+        created_by: '',
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to log call');
     } finally {
@@ -609,8 +630,6 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
             });
         })()
       : reactionsData;
-
-  const usedCallNumbers = user.calls.map((c) => c.call_number);
 
   const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.display_name || user.from_id;
 
@@ -1296,35 +1315,30 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       </div>
 
       <div className="card">
-        <h2>Calls (upsell follow-up)</h2>
+        <h2>Sales / coaching calls</h2>
         <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '1rem' }}>
-          Log calls 1–10 with notes, objections, and plans discussed.
+          Freeform call log — no limit. Feeds the AI persona.
         </p>
         {!showCallForm ? (
-          <button type="button" className="btn" onClick={() => setShowCallForm(true)} disabled={user.calls.length >= 10}>
+          <button type="button" className="btn" onClick={() => setShowCallForm(true)}>
             Log call
           </button>
         ) : (
           <form onSubmit={handleSubmitCall}>
-            <div className="form-group">
-              <label>Call number (1–10)</label>
-              <select
-                value={callForm.call_number}
-                onChange={(e) => setCallForm((f) => ({ ...f, call_number: Number(e.target.value) }))}
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                  <option key={n} value={n} disabled={usedCallNumbers.includes(n)}>
-                    Call {n} {usedCallNumbers.includes(n) ? '(already logged)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="form-group">
               <label>Notes (what was discussed)</label>
               <textarea
                 value={callForm.notes}
                 onChange={(e) => setCallForm((f) => ({ ...f, notes: e.target.value }))}
                 placeholder="What was discussed in the call"
+              />
+            </div>
+            <div className="form-group">
+              <label>Current situation</label>
+              <textarea
+                value={callForm.current_situation}
+                onChange={(e) => setCallForm((f) => ({ ...f, current_situation: e.target.value }))}
+                placeholder="Where they're at right now"
               />
             </div>
             <div className="form-group">
@@ -1341,6 +1355,41 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
                 value={callForm.plans_discussed}
                 onChange={(e) => setCallForm((f) => ({ ...f, plans_discussed: e.target.value }))}
                 placeholder="Payment plans, offers, etc."
+              />
+            </div>
+            <div className="form-group">
+              <label>Next step</label>
+              <input
+                type="text"
+                value={callForm.next_step}
+                onChange={(e) => setCallForm((f) => ({ ...f, next_step: e.target.value }))}
+                placeholder="What happens next"
+              />
+            </div>
+            <div className="form-group">
+              <label>Offer discussed</label>
+              <input
+                type="text"
+                value={callForm.offer_discussed}
+                onChange={(e) => setCallForm((f) => ({ ...f, offer_discussed: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Likelihood to buy (1–10)</label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={callForm.likelihood}
+                onChange={(e) => setCallForm((f) => ({ ...f, likelihood: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Follow-up date</label>
+              <input
+                type="date"
+                value={callForm.follow_up_date}
+                onChange={(e) => setCallForm((f) => ({ ...f, follow_up_date: e.target.value }))}
               />
             </div>
             <div className="form-group">
@@ -1363,11 +1412,14 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
           {user.calls.map((c) => (
             <li key={c.id}>
               <div className="call-meta">
-                Call {c.call_number} · {formatDate(c.called_at)} · {c.created_by || '—'}
+                {formatDate(c.called_at)} · {c.created_by || '—'}{c.likelihood != null ? ` · Likelihood ${c.likelihood}/10` : ''}
               </div>
               {c.notes && <p style={{ margin: '0.35rem 0', fontSize: '0.875rem' }}><strong>Notes:</strong> {c.notes}</p>}
+              {c.current_situation && <p style={{ margin: '0.35rem 0', fontSize: '0.875rem' }}><strong>Situation:</strong> {c.current_situation}</p>}
               {c.objections && <p style={{ margin: '0.35rem 0', fontSize: '0.875rem' }}><strong>Objections:</strong> {c.objections}</p>}
               {c.plans_discussed && <p style={{ margin: '0.35rem 0', fontSize: '0.875rem' }}><strong>Plans discussed:</strong> {c.plans_discussed}</p>}
+              {c.next_step && <p style={{ margin: '0.35rem 0', fontSize: '0.875rem' }}><strong>Next step:</strong> {c.next_step}</p>}
+              {c.offer_discussed && <p style={{ margin: '0.35rem 0', fontSize: '0.875rem' }}><strong>Offer discussed:</strong> {c.offer_discussed}</p>}
             </li>
           ))}
         </ul>
@@ -1375,6 +1427,8 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
           <p style={{ color: '#8b98a5', marginTop: '1rem', fontSize: '0.875rem' }}>No calls logged yet.</p>
         )}
       </div>
+
+      <MemberCrm userId={user.id} />
 
       <div className="card">
         <h2>Reactions given (who they react to)</h2>

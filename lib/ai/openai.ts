@@ -104,6 +104,7 @@ export async function generatePersona(context: {
   messagesBlob: string;
   repliesBlob: string;
   reactionsBlob: string;
+  crmBlob: string;
 }): Promise<PersonaCompletionResult> {
   const [apiKey, model, prompts, schemaDescriptions] = await Promise.all([
     getOpenAiApiKey(),
@@ -116,11 +117,22 @@ export async function generatePersona(context: {
   }
   const modelToUse = model?.trim() || 'gpt-4o-mini-2024-07-18';
 
-  const userPrompt = prompts.userPromptTemplate
+  const hasCrmPlaceholder = prompts.userPromptTemplate.includes('{{crmBlob}}');
+  let userPrompt = prompts.userPromptTemplate
     .replace(/\{\{bio\}\}/g, context.bio)
     .replace(/\{\{messagesBlob\}\}/g, context.messagesBlob)
     .replace(/\{\{repliesBlob\}\}/g, context.repliesBlob)
     .replace(/\{\{reactionsBlob\}\}/g, context.reactionsBlob);
+  if (hasCrmPlaceholder) {
+    userPrompt = userPrompt.replace(/\{\{crmBlob\}\}/g, context.crmBlob);
+  } else {
+    // A prompt template saved before the CRM layer existed won't have this
+    // placeholder — append the data so persona generation still reflects
+    // status/roadmap/wins/coach notes/follow-ups/calls without silently
+    // dropping it. Add {{crmBlob}} to the template in Settings for full
+    // control over wording/position instead.
+    userPrompt += `\n\n## CRM data (status, roadmap, wins, coach notes, open follow-ups, calls)\n${context.crmBlob}`;
+  }
 
   const response_format = buildPersonaJsonSchema(schemaDescriptions);
   const body = {

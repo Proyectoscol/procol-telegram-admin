@@ -45,11 +45,16 @@ Sales intelligence fields (required — fill for every member):
 - engagement_level: 'champion' (drives conversations, frequent quality posts), 'active' (regular participation), 'passive' (occasional), 'lurker' (rarely or never posts).
 - outreach_approach: 1–2 sentences — personalized recommendation for how a sales rep should approach this exact person based on their communication style and interests.
 - objection_patterns: likely sales objections inferred from their messages. Empty array if insufficient data.
-- spending_capacity: 'high' (mentions significant purchases or high income signals), 'medium', 'low' (frugal signals), 'unknown' (insufficient data).`;
+- spending_capacity: 'high' (mentions significant purchases or high income signals), 'medium', 'low' (frugal signals), 'unknown' (insufficient data).
 
-/** Default user prompt template. Use placeholders: {{bio}}, {{messagesBlob}}, {{repliesBlob}}, {{reactionsBlob}}. Seeded into settings on first use if missing. */
+You are also given CRM data: their status/offer/payment fields, roadmap, logged wins, coach notes, open follow-ups, and sales/coaching calls. Treat this as ground truth and weigh it above inference from messages — e.g. a logged win or an explicit payment status should drive buying_intent_score and spending_capacity more than a guess from chat tone. Reference specific CRM entries (by date) in inference_evidence the same way you'd cite a message.`;
+
+/** Default user prompt template. Use placeholders: {{bio}}, {{messagesBlob}}, {{repliesBlob}}, {{reactionsBlob}}, {{crmBlob}}. Seeded into settings on first use if missing. */
 export const DEFAULT_PERSONA_USER_PROMPT_TEMPLATE = `## Profile / Bio
 {{bio}}
+
+## CRM data (status, roadmap, wins, coach notes, open follow-ups, calls)
+{{crmBlob}}
 
 ## Recent messages (newest last; [REPLY TO: "…"] shows the message they were replying to)
 {{messagesBlob}}
@@ -60,7 +65,7 @@ export const DEFAULT_PERSONA_USER_PROMPT_TEMPLATE = `## Profile / Bio
 ## Reactions they gave (emoji + message they reacted to)
 {{reactionsBlob}}
 
-Produce the JSON persona for this member. Include inference_evidence with explicit references to messages or reactions.`;
+Produce the JSON persona for this member. Include inference_evidence with explicit references to CRM entries, messages, or reactions.`;
 
 /** Default system prompt for day insight ("why was there activity this day?"). */
 export const DEFAULT_DAY_INSIGHT_SYSTEM_PROMPT = `You are an analyst for a community chat. Given a day's messages (and optionally filtered to one member's messages plus the messages they replied to), explain why there was this level of activity that day.

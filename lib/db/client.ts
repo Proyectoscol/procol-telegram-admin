@@ -204,6 +204,15 @@ const EXPECTED_TABLES = [
   'ai_usage_logs',
   'day_insights',
   'relationship_insights',
+  'import_reviews',
+  'wins',
+  'coach_notes',
+  'follow_ups',
+  'member_roadmap',
+  'opportunity_scores',
+  'member_events',
+  'questionnaire_responses',
+  'course_progress',
 ] as const;
 
 export async function validateSchema(): Promise<string[]> {

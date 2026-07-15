@@ -59,6 +59,139 @@ export default function ImportPage() {
   const [membersPremiumError, setMembersPremiumError] = useState<string | null>(null);
   const membersPremiumInputRef = useRef<HTMLInputElement>(null);
 
+  const [questionnaireFile, setQuestionnaireFile] = useState<File | null>(null);
+  const [questionnairePreviewLoading, setQuestionnairePreviewLoading] = useState(false);
+  const [questionnaireApplyLoading, setQuestionnaireApplyLoading] = useState(false);
+  const [questionnairePreview, setQuestionnairePreview] = useState<{
+    counts: { total: number; update: number; review: number; skip: number };
+  } | null>(null);
+  const [questionnaireResult, setQuestionnaireResult] = useState<{
+    total: number;
+    updated: number;
+    unmatched: number;
+    skipped: number;
+    errors: string[];
+  } | null>(null);
+  const [questionnaireError, setQuestionnaireError] = useState<string | null>(null);
+  const questionnaireInputRef = useRef<HTMLInputElement>(null);
+
+  const handleQuestionnairePreview = async () => {
+    if (!questionnaireFile) {
+      setQuestionnaireError('Please select a CSV file.');
+      return;
+    }
+    setQuestionnaireError(null);
+    setQuestionnairePreview(null);
+    setQuestionnaireResult(null);
+    setQuestionnairePreviewLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', questionnaireFile);
+      const res = await fetch('/api/import/questionnaire/preview', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Preview failed');
+      setQuestionnairePreview(data);
+    } catch (err) {
+      setQuestionnaireError(err instanceof Error ? err.message : 'Preview failed');
+    } finally {
+      setQuestionnairePreviewLoading(false);
+    }
+  };
+
+  const handleQuestionnaireApply = async () => {
+    if (!questionnaireFile) return;
+    setQuestionnaireError(null);
+    setQuestionnaireApplyLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', questionnaireFile);
+      const res = await fetch('/api/import/questionnaire', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      setQuestionnaireResult(data);
+      setQuestionnairePreview(null);
+      setQuestionnaireFile(null);
+      if (questionnaireInputRef.current) questionnaireInputRef.current.value = '';
+    } catch (err) {
+      setQuestionnaireError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setQuestionnaireApplyLoading(false);
+    }
+  };
+
+  const IMPORT_LIST_TYPES = [
+    { id: 'PAYMENT_PLAN', label: 'Payment plan list' },
+    { id: 'LIFETIME', label: 'Lifetime member list' },
+    { id: 'PREMIUM', label: 'Premium member list' },
+    { id: 'EVENT_TICKET', label: 'Event ticket list' },
+    { id: 'EMAIL', label: 'Email list' },
+    { id: 'MEMBER_UPDATE', label: 'General member update / notes' },
+  ];
+  const [listType, setListType] = useState(IMPORT_LIST_TYPES[0].id);
+  const [listText, setListText] = useState('');
+  const [listPreview, setListPreview] = useState<{
+    rows: { input: { name: string | null; username: string | null; telegramId: string | null; email: string | null }; status: string; matchedUserName?: string; reason?: string }[];
+    counts: { total: number; update: number; review: number; skip: number };
+  } | null>(null);
+  const [listPreviewLoading, setListPreviewLoading] = useState(false);
+  const [listApplyLoading, setListApplyLoading] = useState(false);
+  const [listApplyResult, setListApplyResult] = useState<{
+    total: number;
+    updated: number;
+    tagged: number;
+    unmatched: number;
+    skipped: number;
+    errors: string[];
+  } | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+
+  const handleListPreview = async () => {
+    if (!listText.trim()) {
+      setListError('Paste some rows first.');
+      return;
+    }
+    setListError(null);
+    setListPreview(null);
+    setListApplyResult(null);
+    setListPreviewLoading(true);
+    try {
+      const res = await fetch('/api/import/list/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ importType: listType, text: listText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Preview failed');
+      setListPreview(data);
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : 'Preview failed');
+    } finally {
+      setListPreviewLoading(false);
+    }
+  };
+
+  const handleListApply = async () => {
+    if (!listText.trim()) return;
+    setListError(null);
+    setListApplyLoading(true);
+    try {
+      const res = await fetch('/api/import/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ importType: listType, text: listText, fileName: 'pasted-list' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      setListApplyResult(data);
+      setListPreview(null);
+      setListText('');
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setListApplyLoading(false);
+    }
+  };
+
   const [photosZipFile, setPhotosZipFile] = useState<File | null>(null);
   const [photosLoading, setPhotosLoading] = useState(false);
   const [photosResult, setPhotosResult] = useState<{
@@ -505,6 +638,148 @@ export default function ImportPage() {
             )}
           </button>
         </form>
+      </section>
+
+      <section className="card">
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>CRM list import</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Paste a list (name / username / email, one per line — tab, comma, or semicolon separated; a header row is
+          fine). Rows are matched against existing members by username, Telegram ID, email, then exact name.
+          Anything uncertain goes to the <a href="/review-queue">Review Queue</a> instead of creating a duplicate.
+        </p>
+        <div className="form-group">
+          <label>Import type</label>
+          <select value={listType} onChange={(e) => { setListType(e.target.value); setListPreview(null); setListApplyResult(null); }}>
+            {IMPORT_LIST_TYPES.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Rows</label>
+          <textarea
+            value={listText}
+            onChange={(e) => { setListText(e.target.value); setListPreview(null); }}
+            placeholder={'Jane Doe, jane@example.com, 500\n@johnny, john@example.com'}
+            style={{ minHeight: 160, fontFamily: 'ui-monospace, monospace', fontSize: '0.8125rem' }}
+          />
+        </div>
+        {listError && <div className="alert alert-error">{listError}</div>}
+
+        {listPreview && (
+          <div className="alert" style={{ background: 'rgba(29,155,240,0.12)', border: '1px solid #1d9bf0', color: '#e7e9ea', marginBottom: '1rem' }}>
+            {listPreview.counts.total} row(s): <strong>{listPreview.counts.update}</strong> will update an existing
+            member, <strong>{listPreview.counts.review}</strong> need review, <strong>{listPreview.counts.skip}</strong> are
+            empty and will be skipped.
+          </div>
+        )}
+
+        {listApplyResult && (
+          <div className="alert alert-success">
+            Import complete. Updated: <strong>{listApplyResult.updated}</strong> (tagged: {listApplyResult.tagged}),
+            sent to review: <strong>{listApplyResult.unmatched}</strong>, skipped: {listApplyResult.skipped}, total
+            rows: {listApplyResult.total}.
+            {listApplyResult.unmatched > 0 && (
+              <span> Resolve the unmatched rows in the <a href="/review-queue">Review Queue</a>.</span>
+            )}
+          </div>
+        )}
+
+        <button type="button" className="btn btn-secondary" disabled={!listText.trim() || listPreviewLoading} onClick={handleListPreview}>
+          {listPreviewLoading ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Previewing…
+            </span>
+          ) : (
+            'Preview'
+          )}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          style={{ marginLeft: '0.5rem' }}
+          disabled={!listText.trim() || listApplyLoading}
+          onClick={handleListApply}
+        >
+          {listApplyLoading ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Importing…
+            </span>
+          ) : (
+            'Apply import'
+          )}
+        </button>
+      </section>
+
+      <section className="card">
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Welcome questionnaire</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Upload the questionnaire CSV export (one column per question). Columns are detected by header —
+          name/username/email/Telegram ID identify the member; age, location, goals, business, and &quot;why
+          joined&quot; are extracted automatically, and every column is kept regardless. Matched the same way as the
+          CRM list import; unmatched rows go to the <a href="/review-queue">Review Queue</a>.
+        </p>
+        <div className="upload-zone">
+          <label className="form-group">
+            <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select questionnaire CSV</span>
+            <input
+              ref={questionnaireInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => { setQuestionnaireFile(e.target.files?.[0] ?? null); setQuestionnairePreview(null); }}
+            />
+          </label>
+          <p>{questionnaireFile ? questionnaireFile.name : 'No file selected'}</p>
+        </div>
+        {questionnaireError && <div className="alert alert-error">{questionnaireError}</div>}
+
+        {questionnairePreview && (
+          <div className="alert" style={{ background: 'rgba(29,155,240,0.12)', border: '1px solid #1d9bf0', color: '#e7e9ea', marginBottom: '1rem' }}>
+            {questionnairePreview.counts.total} row(s): <strong>{questionnairePreview.counts.update}</strong> will update
+            an existing member, <strong>{questionnairePreview.counts.review}</strong> need review,{' '}
+            <strong>{questionnairePreview.counts.skip}</strong> are empty and will be skipped.
+          </div>
+        )}
+
+        {questionnaireResult && (
+          <div className="alert alert-success">
+            Import complete. Updated: <strong>{questionnaireResult.updated}</strong>, sent to review:{' '}
+            <strong>{questionnaireResult.unmatched}</strong>, skipped: {questionnaireResult.skipped}, total rows:{' '}
+            {questionnaireResult.total}.
+            {questionnaireResult.unmatched > 0 && (
+              <span> Resolve the unmatched rows in the <a href="/review-queue">Review Queue</a>.</span>
+            )}
+          </div>
+        )}
+
+        <button type="button" className="btn btn-secondary" disabled={!questionnaireFile || questionnairePreviewLoading} onClick={handleQuestionnairePreview}>
+          {questionnairePreviewLoading ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Previewing…
+            </span>
+          ) : (
+            'Preview'
+          )}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          style={{ marginLeft: '0.5rem' }}
+          disabled={!questionnaireFile || questionnaireApplyLoading}
+          onClick={handleQuestionnaireApply}
+        >
+          {questionnaireApplyLoading ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Importing…
+            </span>
+          ) : (
+            'Apply import'
+          )}
+        </button>
       </section>
     </div>
   );

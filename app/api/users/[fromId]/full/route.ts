@@ -86,7 +86,9 @@ export async function GET(
         statsParams
       ),
       queryWithRetry(
-        'SELECT id, call_number, called_at, notes, objections, plans_discussed, created_by, created_at FROM contact_calls WHERE user_id = $1 ORDER BY call_number',
+        `SELECT id, call_number, called_at, notes, objections, plans_discussed, current_situation,
+                next_step, offer_discussed, likelihood, follow_up_date, created_by, created_at
+         FROM contact_calls WHERE user_id = $1 ORDER BY called_at DESC NULLS LAST, created_at DESC`,
         [user.id]
       ),
       queryWithRetry(

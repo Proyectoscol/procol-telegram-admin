@@ -263,3 +263,177 @@ ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS engagement_level TEXT;
 ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS outreach_approach TEXT;
 ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS objection_patterns JSONB DEFAULT '[]';
 ALTER TABLE contact_personas ADD COLUMN IF NOT EXISTS spending_capacity TEXT;
+
+-- ============================================================
+-- CRM v2: Opportunity Engine, member timeline, roadmap, sales/coaching
+-- layer, review queue, questionnaire + Teachable course sync.
+-- See supabase-migration-crm-v2.sql for the standalone runnable version
+-- (same statements) and the merge plan for why each table exists.
+-- ============================================================
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'COLD';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS offer_type TEXT DEFAULT 'UNKNOWN';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'UNKNOWN';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12, 2);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status_override TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS left_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+CREATE INDEX IF NOT EXISTS idx_users_offer_type ON users(offer_type);
+CREATE INDEX IF NOT EXISTS idx_users_left_at ON users(left_at) WHERE left_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
+
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'TELEGRAM';
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS members_created INT DEFAULT 0;
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS members_updated INT DEFAULT 0;
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS tagged INT DEFAULT 0;
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS unmatched INT DEFAULT 0;
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS skipped INT DEFAULT 0;
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS error_count INT DEFAULT 0;
+ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS total_rows INT DEFAULT 0;
+ALTER TABLE import_batches ALTER COLUMN chat_id DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS import_reviews (
+  id SERIAL PRIMARY KEY,
+  batch_id INT REFERENCES import_batches(id) ON DELETE SET NULL,
+  import_type TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  raw_row JSONB NOT NULL,
+  suggested_name TEXT,
+  suggested_username TEXT,
+  suggested_telegram_id TEXT,
+  suggested_email TEXT,
+  candidate_ids JSONB,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  resolved_user_id INT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_import_reviews_status ON import_reviews(status);
+CREATE INDEX IF NOT EXISTS idx_import_reviews_type ON import_reviews(import_type);
+
+CREATE TABLE IF NOT EXISTS wins (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount NUMERIC(12, 2),
+  description TEXT,
+  occurred_at TIMESTAMPTZ,
+  source TEXT,
+  confidence TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_wins_user ON wins(user_id);
+
+CREATE TABLE IF NOT EXISTS coach_notes (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  note_type TEXT,
+  summary TEXT,
+  next_action TEXT,
+  follow_up_date DATE,
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_coach_notes_user ON coach_notes(user_id);
+
+CREATE TABLE IF NOT EXISTS follow_ups (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  due_date DATE,
+  status TEXT NOT NULL DEFAULT 'OPEN',
+  priority TEXT NOT NULL DEFAULT 'MEDIUM',
+  reason TEXT,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_follow_ups_user ON follow_ups(user_id);
+CREATE INDEX IF NOT EXISTS idx_follow_ups_due ON follow_ups(due_date);
+CREATE INDEX IF NOT EXISTS idx_follow_ups_status ON follow_ups(status);
+
+-- Sales calls: the old "10-call script" is retired — contact_calls becomes a
+-- freeform, unlimited call log instead of a separate table.
+ALTER TABLE contact_calls DROP CONSTRAINT IF EXISTS contact_calls_call_number_check;
+ALTER TABLE contact_calls DROP CONSTRAINT IF EXISTS contact_calls_user_id_call_number_key;
+ALTER TABLE contact_calls ALTER COLUMN call_number DROP NOT NULL;
+ALTER TABLE contact_calls ADD COLUMN IF NOT EXISTS current_situation TEXT;
+ALTER TABLE contact_calls ADD COLUMN IF NOT EXISTS next_step TEXT;
+ALTER TABLE contact_calls ADD COLUMN IF NOT EXISTS offer_discussed TEXT;
+ALTER TABLE contact_calls ADD COLUMN IF NOT EXISTS likelihood SMALLINT;
+ALTER TABLE contact_calls ADD COLUMN IF NOT EXISTS follow_up_date DATE;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'contact_calls_likelihood_check') THEN
+    ALTER TABLE contact_calls ADD CONSTRAINT contact_calls_likelihood_check CHECK (likelihood IS NULL OR (likelihood BETWEEN 1 AND 10));
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS member_roadmap (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  stage TEXT,
+  main_goal TEXT,
+  current_blocker TEXT,
+  next_action TEXT,
+  assigned_to TEXT,
+  due_date DATE,
+  progress_notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS opportunity_scores (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  score INT NOT NULL DEFAULT 0,
+  category TEXT,
+  reason TEXT,
+  recommended_action TEXT,
+  done_at TIMESTAMPTZ,
+  last_calculated TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_opportunity_scores_category_score ON opportunity_scores(category, score);
+CREATE INDEX IF NOT EXISTS idx_opportunity_scores_last_calculated ON opportunity_scores(last_calculated);
+
+CREATE TABLE IF NOT EXISTS member_events (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  source TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_member_events_user_time ON member_events(user_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_member_events_type ON member_events(event_type);
+
+CREATE TABLE IF NOT EXISTS questionnaire_responses (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  age_range TEXT,
+  location TEXT,
+  goals TEXT,
+  business TEXT,
+  why_joined TEXT,
+  raw_answers JSONB DEFAULT '{}'::jsonb,
+  submitted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS course_progress (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  teachable_user_id TEXT,
+  percent_complete NUMERIC(5, 2),
+  lessons_completed INT,
+  lessons_total INT,
+  last_synced_at TIMESTAMPTZ,
+  raw JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);

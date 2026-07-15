@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureSchema, pool } from '@/lib/db/client';
+import { createContactCall } from '@/lib/crm/records';
 
 export const runtime = 'nodejs';
 
@@ -16,35 +17,8 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
     const body = await request.json();
-    const {
-      call_number,
-      called_at,
-      notes,
-      objections,
-      plans_discussed,
-      created_by,
-    } = body;
-    if (call_number == null || call_number < 1 || call_number > 10) {
-      return NextResponse.json(
-        { error: 'call_number must be between 1 and 10' },
-        { status: 400 }
-      );
-    }
-    const { rows } = await pool.query(
-      `INSERT INTO contact_calls (user_id, call_number, called_at, notes, objections, plans_discussed, created_by)
-       VALUES ($1, $2, $3::timestamptz, $4, $5, $6, $7)
-       RETURNING id, user_id, call_number, called_at, notes, objections, plans_discussed, created_by, created_at`,
-      [
-        user.id,
-        call_number,
-        called_at || new Date().toISOString(),
-        notes ?? null,
-        objections ?? null,
-        plans_discussed ?? null,
-        created_by ?? null,
-      ]
-    );
-    return NextResponse.json(rows[0]);
+    const call = await createContactCall(user.id, body);
+    return NextResponse.json(call);
   } catch (err) {
     const { log } = await import('@/lib/logger');
     log.error('user-calls', 'Create call failed', err);
