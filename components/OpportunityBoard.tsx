@@ -256,11 +256,8 @@ export function OpportunityBoard() {
                         <a href={href} style={{ fontWeight: 600, color: '#e7e9ea', textDecoration: 'none' }}>
                           {card.displayName || card.username || card.fromId || `Member ${card.userId}`}
                         </a>
-                        {card.isLifetime ? (
-                          <span className="badge badge-premium">Lifetime</span>
-                        ) : card.isPremium ? (
-                          <span className="badge badge-premium">Premium</span>
-                        ) : null}
+                        {card.isPremium && <span className="badge badge-premium">Premium</span>}
+                        {card.isLifetime && <span className="badge badge-success">Lifetime</span>}
                         {!card.isCurrentMember && <span className="badge badge-muted">Not a member</span>}
                         <span className={`badge ${scoreBadgeClass(card.score)}`}>Score {card.score}</span>
                       </div>

@@ -651,7 +651,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         >
           {user.is_premium ? 'Premium' : 'Not premium'}
         </span>
-        {user.is_lifetime && <span className="badge badge-premium">Lifetime</span>}
+        {user.is_lifetime && <span className="badge badge-success">Lifetime</span>}
         <a href="/contacts" className="btn btn-secondary" style={{ marginLeft: 'auto' }}>Back to contacts</a>
       </div>
 
