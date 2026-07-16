@@ -156,9 +156,11 @@ const RULES: ((c: Ctx) => Match | null)[] = [
       : null,
 
   // ── SALES ──────────────────────────────────────────────────────────────────
+  // Reverse upsell: Premium always implies Lifetime, so this can only fire for
+  // someone who holds Lifetime on its own, without Premium.
   (c) =>
-    hasPremium(c) && !hasLifetime(c) && c.daysSinceActive <= 30
-      ? { category: 'SALES', score: 78, reason: 'Premium & active, no Lifetime yet', recommendedAction: 'Pitch the Lifetime upgrade' }
+    hasLifetime(c) && !hasPremium(c) && c.daysSinceActive <= 30
+      ? { category: 'SALES', score: 78, reason: 'Lifetime member, not yet in Premium', recommendedAction: 'Pitch Premium access' }
       : null,
   (c) =>
     c.daysSinceWin != null && c.daysSinceWin <= 21 && isPaying(c)
