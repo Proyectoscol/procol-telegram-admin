@@ -33,14 +33,17 @@ export interface ImportTypeConfig {
   tag?: string;
   offerType?: string;
   paymentStatus?: string;
+  /** Sets is_premium — and, since Premium always implies Lifetime, cascades is_lifetime too. */
   premiumAccess?: boolean;
+  /** Sets is_lifetime directly, without touching is_premium (Lifetime does not imply Premium). */
+  lifetimeAccess?: boolean;
 }
 
 export const IMPORT_TYPES: ImportTypeConfig[] = [
   { id: 'EMAIL', label: 'Email list', hint: 'name / username, email — one per line, comma or tab separated.' },
   { id: 'PAYMENT_PLAN', label: 'Payment plan list', hint: 'name / username / email, amount (optional).', tag: 'Payment Plan', offerType: 'PAYMENT_PLAN', paymentStatus: 'PAYMENT_PLAN' },
-  // Lifetime is a superset of Premium — Lifetime members get Premium access too.
-  { id: 'LIFETIME', label: 'Lifetime member list', hint: 'name / username / email, amount (optional).', tag: 'Lifetime', offerType: 'LIFETIME', paymentStatus: 'PAID', premiumAccess: true },
+  // Lifetime is its own product — it does NOT imply Premium (the reverse does).
+  { id: 'LIFETIME', label: 'Lifetime member list', hint: 'name / username / email, amount (optional).', tag: 'Lifetime', offerType: 'LIFETIME', paymentStatus: 'PAID', lifetimeAccess: true },
   { id: 'PREMIUM', label: 'Premium member list', hint: 'name / username / email.', tag: 'Premium', offerType: 'PREMIUM', premiumAccess: true },
   { id: 'EVENT_TICKET', label: 'Event ticket list', hint: 'name / username / email.', tag: 'Event Ticket', offerType: 'EVENT_TICKET' },
   { id: 'MEMBER_UPDATE', label: 'General member update / notes', hint: 'name / username / email, plus notes and/or amount.' },
@@ -161,7 +164,15 @@ export async function applyTypeRules(userId: number, typeId: string, row: Member
 
   if (cfg.offerType) push('offer_type', cfg.offerType);
   if (cfg.paymentStatus) push('payment_status', cfg.paymentStatus);
-  if (cfg.premiumAccess) push('is_premium', true);
+  if (cfg.premiumAccess) {
+    push('is_premium', true);
+    sets.push(`premium_since = COALESCE(premium_since, NOW())`);
+  }
+  // Premium always cascades to Lifetime (one-directional); Lifetime alone never touches Premium.
+  if (cfg.premiumAccess || cfg.lifetimeAccess) {
+    push('is_lifetime', true);
+    sets.push(`lifetime_since = COALESCE(lifetime_since, NOW())`);
+  }
   if (row.amount != null) push('amount_paid', row.amount);
   if (typeId === 'EMAIL' && row.email) push('email', row.email);
   if (typeId === 'MEMBER_UPDATE') {

@@ -6,7 +6,7 @@ export interface OpportunityCard {
   fromId: string | null;
   displayName: string | null;
   username: string | null;
-  /** True for Premium OR Lifetime — Lifetime is a superset of Premium access. */
+  /** The Premium group specifically. Premium always implies Lifetime (cascaded at write time), not the reverse. */
   isPremium: boolean;
   isLifetime: boolean;
   isCurrentMember: boolean;
@@ -42,16 +42,10 @@ interface OpportunityRow {
   from_id: string | null;
   display_name: string | null;
   username: string | null;
-  is_premium_effective: boolean | null;
+  is_premium: boolean | null;
   is_lifetime: boolean | null;
   is_current_member: boolean | null;
 }
-
-// Lifetime is a superset of Premium (Lifetime members have Premium access too).
-// Computed from offer_type/tags too, not just the is_premium column, so this
-// stays correct even for members imported before is_premium was backfilled.
-const PREMIUM_EXPR = `(u.is_premium = TRUE OR u.offer_type = 'LIFETIME' OR u.tags ? 'Lifetime')`;
-const LIFETIME_EXPR = `(u.offer_type = 'LIFETIME' OR u.tags ? 'Lifetime')`;
 
 export type PremiumFilter = 'all' | 'only' | 'exclude';
 
@@ -59,7 +53,7 @@ export interface OpportunityBoardFilters {
   includeDone?: boolean;
   /** Only members currently in the community. Defaults to true. */
   currentOnly?: boolean;
-  /** 'all' (default) | 'only' (Premium/Lifetime only) | 'exclude' (non-Premium only). */
+  /** 'all' (default) | 'only' (the Premium group only) | 'exclude' (non-Premium only). */
   premiumFilter?: PremiumFilter;
 }
 
@@ -71,13 +65,12 @@ export async function getOpportunityBoard(filters: OpportunityBoardFilters = {})
   const conditions = ['o.category IS NOT NULL'];
   if (!includeDone) conditions.push('o.done_at IS NULL');
   if (currentOnly) conditions.push('u.is_current_member = TRUE');
-  if (premiumFilter === 'only') conditions.push(PREMIUM_EXPR);
-  if (premiumFilter === 'exclude') conditions.push(`NOT ${PREMIUM_EXPR}`);
+  if (premiumFilter === 'only') conditions.push('u.is_premium = TRUE');
+  if (premiumFilter === 'exclude') conditions.push('COALESCE(u.is_premium, FALSE) = FALSE');
 
   const result = await queryWithRetry<OpportunityRow>(
     `SELECT o.user_id, o.score, o.category, o.reason, o.recommended_action, o.done_at, o.last_calculated,
-            u.from_id, u.display_name, u.username, u.is_current_member,
-            ${PREMIUM_EXPR} AS is_premium_effective, ${LIFETIME_EXPR} AS is_lifetime
+            u.from_id, u.display_name, u.username, u.is_current_member, u.is_premium, u.is_lifetime
      FROM opportunity_scores o
      JOIN users u ON u.id = o.user_id
      WHERE ${conditions.join(' AND ')}
@@ -93,7 +86,7 @@ export async function getOpportunityBoard(filters: OpportunityBoardFilters = {})
       fromId: row.from_id,
       displayName: row.display_name,
       username: row.username,
-      isPremium: !!row.is_premium_effective,
+      isPremium: !!row.is_premium,
       isLifetime: !!row.is_lifetime,
       isCurrentMember: !!row.is_current_member,
       score: row.score,

@@ -437,3 +437,18 @@ CREATE TABLE IF NOT EXISTS course_progress (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ============================================================
+-- Lifetime is its own product, distinct from the Premium group. Premium
+-- always implies Lifetime (cascaded at every write path); Lifetime does NOT
+-- imply Premium — a member can hold Lifetime without being in Premium.
+-- ============================================================
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_lifetime BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_since TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_users_is_lifetime ON users(is_lifetime) WHERE is_lifetime = TRUE;
+
+-- Safety net enforcing the invariant "Premium implies Lifetime" even if some
+-- other path ever sets is_premium without going through the cascade. Only
+-- touches rows that need it, so this is a no-op after the first run.
+UPDATE users SET is_lifetime = TRUE, lifetime_since = COALESCE(lifetime_since, premium_since, NOW())
+WHERE is_premium = TRUE AND COALESCE(is_lifetime, FALSE) = FALSE;

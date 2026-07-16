@@ -23,6 +23,7 @@ interface UserDetail {
   last_name?: string | null;
   phone?: string | null;
   is_premium: boolean;
+  is_lifetime: boolean;
   telegram_premium?: boolean;
   telegram_verified?: boolean;
   telegram_fake?: boolean;
@@ -491,7 +492,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
     }
   };
 
-  const handlePatch = async (updates: { is_premium?: boolean; assigned_to?: string; notes?: string }) => {
+  const handlePatch = async (updates: { is_premium?: boolean; is_lifetime?: boolean; assigned_to?: string; notes?: string }) => {
     if (!user) return;
     setSaving(true);
     try {
@@ -650,6 +651,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         >
           {user.is_premium ? 'Premium' : 'Not premium'}
         </span>
+        {user.is_lifetime && <span className="badge badge-premium">Lifetime</span>}
         <a href="/contacts" className="btn btn-secondary" style={{ marginLeft: 'auto' }}>Back to contacts</a>
       </div>
 
@@ -1292,6 +1294,27 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
             />
             <label htmlFor="is_premium">In Premium</label>
           </div>
+          <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: '0.35rem 0 0' }}>
+            Turning Premium on always turns Lifetime on too — Premium implies Lifetime, not the reverse.
+          </p>
+        </div>
+        <div className="form-group">
+          <div className="toggle-wrap">
+            <input
+              type="checkbox"
+              id="is_lifetime"
+              checked={user.is_lifetime}
+              onChange={(e) => handlePatch({ is_lifetime: e.target.checked })}
+              disabled={saving || user.is_premium}
+              title={user.is_premium ? 'Premium members are always Lifetime' : undefined}
+            />
+            <label htmlFor="is_lifetime">Lifetime</label>
+          </div>
+          {!user.is_premium && (
+            <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: '0.35rem 0 0' }}>
+              Can be on without Premium — Lifetime is its own product.
+            </p>
+          )}
         </div>
         <div className="form-group">
           <label>Assigned to</label>

@@ -28,6 +28,8 @@ interface Ctx {
   paymentStatus: string;
   status: string;
   premiumAccess: boolean;
+  /** The persisted is_lifetime column — a distinct product Premium members are also granted, but not vice versa. */
+  lifetimeAccess: boolean;
   amountPaid: number | null;
   overallMessageCount: number;
   isCurrentMember: boolean;
@@ -87,10 +89,11 @@ const isPaying = (c: Ctx) =>
   c.tags.has('Lifetime') ||
   c.tags.has('Payment Plan');
 
-// Lifetime is a superset of Premium (Lifetime members have Premium access too),
-// so hasPremium is true for either tier.
-const hasLifetime = (c: Ctx) => c.offerType === 'LIFETIME' || c.tags.has('Lifetime');
-const hasPremium = (c: Ctx) => c.offerType === 'PREMIUM' || c.premiumAccess || c.tags.has('Premium') || hasLifetime(c);
+// Premium implies Lifetime (enforced at write time — turning Premium on always
+// cascades to Lifetime), but Lifetime does NOT imply Premium — someone can hold
+// the Lifetime product without being in the Premium group. One-directional.
+const hasPremium = (c: Ctx) => c.offerType === 'PREMIUM' || c.premiumAccess || c.tags.has('Premium');
+const hasLifetime = (c: Ctx) => c.lifetimeAccess || c.offerType === 'LIFETIME' || c.tags.has('Lifetime');
 
 // Each rule returns a Match or null. All are evaluated; the highest score wins.
 const RULES: ((c: Ctx) => Match | null)[] = [
@@ -220,6 +223,7 @@ interface UserRow {
   status: string | null;
   status_override: string | null;
   is_premium: boolean | null;
+  is_lifetime: boolean | null;
   amount_paid: string | number | null;
   tags: string[] | null;
   is_current_member: boolean | null;
@@ -244,7 +248,7 @@ export async function recomputeOpportunities(userIds?: number[]): Promise<number
 
   const usersResult = await queryWithRetry<UserRow>(
     `SELECT u.id, u.from_id, u.offer_type, u.payment_status, u.status, u.status_override,
-            u.is_premium, u.amount_paid, u.tags, u.is_current_member, u.left_at,
+            u.is_premium, u.is_lifetime, u.amount_paid, u.tags, u.is_current_member, u.left_at,
             u.member_since, u.birthday,
             mr.stage AS roadmap_stage, mr.due_date AS roadmap_due_date
      FROM users u
@@ -334,6 +338,7 @@ export async function recomputeOpportunities(userIds?: number[]): Promise<number
       paymentStatus: u.payment_status ?? 'UNKNOWN',
       status: u.status ?? 'COLD',
       premiumAccess: !!u.is_premium,
+      lifetimeAccess: !!u.is_lifetime,
       amountPaid: u.amount_paid != null ? Number(u.amount_paid) : null,
       overallMessageCount: activity?.cnt ?? 0,
       isCurrentMember: !!u.is_current_member,

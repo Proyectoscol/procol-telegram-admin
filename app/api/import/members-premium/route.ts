@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
  * POST /api/import/members-premium
  * Same CSV format as Group Members (username, user id, name, group id).
  * For each row that matches an existing user by from_id, sets is_premium = TRUE
- * and premium_since = COALESCE(premium_since, NOW()).
+ * and premium_since = COALESCE(premium_since, NOW()) — and, since Premium always
+ * implies Lifetime, also sets is_lifetime = TRUE / lifetime_since.
  * Does not insert new users; does not set is_premium = FALSE for anyone.
  * Returns: { updated, total, durationMs, errors? }
  */
@@ -49,10 +50,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Premium always cascades to Lifetime — it's a distinct product Premium members
+    // are also granted, but holding Lifetime alone doesn't grant Premium.
     const result = await pool.query(
       `UPDATE users
        SET is_premium = TRUE,
            premium_since = COALESCE(premium_since, NOW()),
+           is_lifetime = TRUE,
+           lifetime_since = COALESCE(lifetime_since, NOW()),
            updated_at = NOW()
        WHERE from_id = ANY($1::text[])`,
       [fromIds]

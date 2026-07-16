@@ -18,7 +18,7 @@ export async function GET(
 
     const userRes = await pool.query(
       `SELECT id, from_id, display_name, username, first_name, last_name, phone,
-              is_premium, telegram_premium, telegram_verified, telegram_fake, telegram_bot,
+              is_premium, is_lifetime, telegram_premium, telegram_verified, telegram_fake, telegram_bot,
               telegram_status_type, telegram_bio, telegram_last_seen,
               assigned_to, notes, created_at, updated_at FROM users WHERE from_id = $1`,
       [fromId]
@@ -113,13 +113,22 @@ export async function PATCH(
     await ensureSchema();
     const fromId = decodeURIComponent((await params).fromId);
     const body = await request.json();
-    const { is_premium, assigned_to, notes } = body;
+    const { is_premium, is_lifetime, assigned_to, notes } = body;
     const updates: string[] = [];
     const values: (string | number | boolean | null)[] = [];
     let idx = 1;
     if (typeof is_premium === 'boolean') {
       updates.push(`is_premium = $${idx++}`);
       values.push(is_premium);
+      if (is_premium) updates.push(`premium_since = COALESCE(premium_since, NOW())`);
+    }
+    // Premium always cascades to Lifetime (one-directional) — turning Premium on
+    // forces Lifetime on too, even if is_lifetime wasn't sent in this request.
+    const effectiveLifetime = is_premium === true ? true : is_lifetime;
+    if (typeof effectiveLifetime === 'boolean') {
+      updates.push(`is_lifetime = $${idx++}`);
+      values.push(effectiveLifetime);
+      if (effectiveLifetime) updates.push(`lifetime_since = COALESCE(lifetime_since, NOW())`);
     }
     if (assigned_to !== undefined) {
       updates.push(`assigned_to = $${idx++}`);
@@ -138,7 +147,7 @@ export async function PATCH(
       `UPDATE users SET ${updates.join(', ')} WHERE from_id = $${idx}`,
       values
     );
-    const u = await pool.query('SELECT id, from_id, display_name, username, is_premium, assigned_to, notes FROM users WHERE from_id = $1', [fromId]);
+    const u = await pool.query('SELECT id, from_id, display_name, username, is_premium, is_lifetime, assigned_to, notes FROM users WHERE from_id = $1', [fromId]);
     return NextResponse.json(u.rows[0] || {});
   } catch (err) {
     const { log } = await import('@/lib/logger');

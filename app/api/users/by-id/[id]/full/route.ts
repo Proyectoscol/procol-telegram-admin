@@ -31,7 +31,7 @@ export async function GET(
     // 1. User lookup
     const userRes = await queryWithRetry(
       `SELECT id, from_id, display_name, username, first_name, last_name, phone,
-              is_premium, telegram_premium, telegram_verified, telegram_fake, telegram_bot,
+              is_premium, is_lifetime, telegram_premium, telegram_verified, telegram_fake, telegram_bot,
               telegram_status_type, telegram_bio, telegram_last_seen,
               assigned_to, notes, created_at, updated_at, profile_photo_urls FROM users WHERE id = $1`,
       [id]
