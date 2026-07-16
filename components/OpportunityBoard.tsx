@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingCard } from '@/components/Loading';
 
+type PremiumFilter = 'all' | 'only' | 'exclude';
+
 interface OpportunityCard {
   userId: number;
   fromId: string | null;
   displayName: string | null;
   username: string | null;
   isPremium: boolean;
+  isLifetime: boolean;
   isCurrentMember: boolean;
   score: number;
   reason: string | null;
@@ -61,6 +64,30 @@ function ToggleSwitch({ on, onChange, label }: { on: boolean; onChange: (next: b
   );
 }
 
+const PREMIUM_FILTER_OPTIONS: { value: PremiumFilter; label: string }[] = [
+  { value: 'all', label: 'All members' },
+  { value: 'only', label: 'Premium only' },
+  { value: 'exclude', label: 'Not premium' },
+];
+
+function PremiumFilterControl({ value, onChange }: { value: PremiumFilter; onChange: (v: PremiumFilter) => void }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.875rem', color: '#8b98a5' }}>
+      {PREMIUM_FILTER_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          className={`btn ${value === opt.value ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ padding: '0.3rem 0.6rem', fontSize: '0.8125rem' }}
+          onClick={() => onChange(opt.value)}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function OpportunityBoard() {
   const [board, setBoard] = useState<Board | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,12 +96,12 @@ export function OpportunityBoard() {
   const [mining, setMining] = useState(false);
   const [mineResult, setMineResult] = useState<{ membersScanned: number; eventsCreated: number } | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
-  const [activeOnly, setActiveOnly] = useState(true);
-  const [premiumOnly, setPremiumOnly] = useState(false);
+  const [currentOnly, setCurrentOnly] = useState(true);
+  const [premiumFilter, setPremiumFilter] = useState<PremiumFilter>('all');
 
   const load = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams({ active: String(activeOnly), premium: String(premiumOnly) });
+    const params = new URLSearchParams({ current: String(currentOnly), premium: premiumFilter });
     fetch(`/api/opportunities?${params}`)
       .then((r) => r.json())
       .then((data) => {
@@ -84,7 +111,7 @@ export function OpportunityBoard() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load opportunities'))
       .finally(() => setLoading(false));
-  }, [activeOnly, premiumOnly]);
+  }, [currentOnly, premiumFilter]);
 
   useEffect(() => {
     load();
@@ -170,9 +197,9 @@ export function OpportunityBoard() {
               </span>
             )}
           </div>
-          <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
-            <ToggleSwitch on={activeOnly} onChange={setActiveOnly} label="Active members only" />
-            <ToggleSwitch on={premiumOnly} onChange={setPremiumOnly} label="Premium members only" />
+          <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <ToggleSwitch on={currentOnly} onChange={setCurrentOnly} label="Current members only" />
+            <PremiumFilterControl value={premiumFilter} onChange={setPremiumFilter} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -197,8 +224,8 @@ export function OpportunityBoard() {
 
       {activeCategories.length === 0 ? (
         <div className="card">
-          No open opportunities for this filter. Try toggling &quot;Active members only&quot; / &quot;Premium members
-          only&quot;, or run Recalculate after new activity, imports, wins, or roadmap changes.
+          No open opportunities for this filter. Try &quot;Current members only&quot; / the Premium filter above, or
+          run Recalculate after new activity, imports, wins, or roadmap changes.
         </div>
       ) : (
         activeCategories.map((cat) => (
@@ -229,7 +256,11 @@ export function OpportunityBoard() {
                         <a href={href} style={{ fontWeight: 600, color: '#e7e9ea', textDecoration: 'none' }}>
                           {card.displayName || card.username || card.fromId || `Member ${card.userId}`}
                         </a>
-                        {card.isPremium && <span className="badge badge-premium">Premium</span>}
+                        {card.isLifetime ? (
+                          <span className="badge badge-premium">Lifetime</span>
+                        ) : card.isPremium ? (
+                          <span className="badge badge-premium">Premium</span>
+                        ) : null}
                         {!card.isCurrentMember && <span className="badge badge-muted">Not a member</span>}
                         <span className={`badge ${scoreBadgeClass(card.score)}`}>Score {card.score}</span>
                       </div>

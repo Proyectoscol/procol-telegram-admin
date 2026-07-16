@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const board = await getOpportunityBoard({ activeOnly: true });
+    const board = await getOpportunityBoard({ currentOnly: true });
     if (board.totalOpen === 0) return NextResponse.json({ sent: false, reason: 'no open opportunities' });
     await sendTelegramMessage(chatId, formatDigest(board));
     return NextResponse.json({ sent: true, totalOpen: board.totalOpen });

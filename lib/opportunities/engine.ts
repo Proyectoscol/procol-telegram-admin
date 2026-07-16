@@ -87,8 +87,10 @@ const isPaying = (c: Ctx) =>
   c.tags.has('Lifetime') ||
   c.tags.has('Payment Plan');
 
-const hasPremium = (c: Ctx) => c.offerType === 'PREMIUM' || c.premiumAccess || c.tags.has('Premium');
+// Lifetime is a superset of Premium (Lifetime members have Premium access too),
+// so hasPremium is true for either tier.
 const hasLifetime = (c: Ctx) => c.offerType === 'LIFETIME' || c.tags.has('Lifetime');
+const hasPremium = (c: Ctx) => c.offerType === 'PREMIUM' || c.premiumAccess || c.tags.has('Premium') || hasLifetime(c);
 
 // Each rule returns a Match or null. All are evaluated; the highest score wins.
 const RULES: ((c: Ctx) => Match | null)[] = [

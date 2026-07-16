@@ -39,7 +39,8 @@ export interface ImportTypeConfig {
 export const IMPORT_TYPES: ImportTypeConfig[] = [
   { id: 'EMAIL', label: 'Email list', hint: 'name / username, email — one per line, comma or tab separated.' },
   { id: 'PAYMENT_PLAN', label: 'Payment plan list', hint: 'name / username / email, amount (optional).', tag: 'Payment Plan', offerType: 'PAYMENT_PLAN', paymentStatus: 'PAYMENT_PLAN' },
-  { id: 'LIFETIME', label: 'Lifetime member list', hint: 'name / username / email, amount (optional).', tag: 'Lifetime', offerType: 'LIFETIME', paymentStatus: 'PAID' },
+  // Lifetime is a superset of Premium — Lifetime members get Premium access too.
+  { id: 'LIFETIME', label: 'Lifetime member list', hint: 'name / username / email, amount (optional).', tag: 'Lifetime', offerType: 'LIFETIME', paymentStatus: 'PAID', premiumAccess: true },
   { id: 'PREMIUM', label: 'Premium member list', hint: 'name / username / email.', tag: 'Premium', offerType: 'PREMIUM', premiumAccess: true },
   { id: 'EVENT_TICKET', label: 'Event ticket list', hint: 'name / username / email.', tag: 'Event Ticket', offerType: 'EVENT_TICKET' },
   { id: 'MEMBER_UPDATE', label: 'General member update / notes', hint: 'name / username / email, plus notes and/or amount.' },
