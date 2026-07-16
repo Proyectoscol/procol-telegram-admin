@@ -153,10 +153,65 @@ constraints that stopped new freeform rows are relaxed.
 8. Telegram bot (digest + input) — biggest lift, do last once the data model
    underneath it is stable.
 
-Note: the member timeline only has events going forward from now — there's no
-retroactive backfill of "joined the group" or historical import events into
-`member_events`. Flag if you want that backfilled; it's a bigger job (has to
-infer join dates from message/roster history per member).
+Update: retroactive backfill is done. `lib/timeline/mineMessages.ts` (added
+after live-testing on production) scans every member's full message history
+in one bulk pass and logs: first message ever sent, stated goals, wins/
+accomplishments, problems/blockers, and dollar amounts mentioned — all
+deterministic keyword matching, idempotent, triggered via "Mine timelines
+from messages" on the Opportunities page. Verified against production:
+2,976 real events across 1,626 members in ~5 seconds, confirmed idempotent
+on re-run.
+
+Also added, from live-testing feedback: Active-members-only (default on) and
+Premium-members-only (default off) toggles on the Opportunities board,
+independently combinable; score badges color-coded by urgency.
+
+## Status vs. Damian's original ask (audited 2026-07-15)
+
+| Ask | Status |
+|---|---|
+| Opportunity Engine homepage — who to talk to, why, what action | ✅ Done, verified live (332 real opportunities found in production) |
+| AI member profiles, auto-updating from messages/notes/wins/calls | 🟡 Partial — persona now reads CRM data, but generation is still a manual "Generate persona" click, not automatic on every data change |
+| Member timeline — joined, wins, coach calls, purchases, follow-ups, roadmap, course progress | ✅ Done — CRM-mutation events (going forward) + message-history mining (retroactive). Course progress blocked on Teachable (below) |
+| Teachable integration (course progress by email) | ❌ Not started — blocked on a sample export from Damian's scraper |
+| Welcome questionnaire import, structured into profile | ✅ Done, built and live |
+| Automate imports/profiles/activity/opportunities | 🟡 Partial — imports and CRM edits auto-recompute opportunities; there's no scheduled/cron automation yet (everything is triggered by a button click or an import), and persona regeneration isn't automatic |
+| Daily Telegram digest | ❌ Not started |
+| Input Telegram bot (call notes → CRM) | ❌ Not started |
+
+Remaining gaps, in priority order: (1) Teachable sync — still blocked on you
+or Damian sending a sample export; (2) automatic/scheduled opportunity
+recompute + persona regeneration (currently manual triggers); (3) the
+Telegram bot (daily digest + input bot) — biggest remaining lift.
+
+## Round 2 additions (automation + Telegram bot scaffolding)
+
+- **Scheduled automation** (`vercel.json` crons, all gated behind `CRON_SECRET`
+  — fail closed, nothing runs until you set it):
+  - `mine-timelines` (2am UTC) — catches new messages since the last run.
+  - `regenerate-personas` (3am UTC) — regenerates AI personas for members
+    with no persona yet or new activity since their last one, capped at
+    **50/day** to bound OpenAI spend (242 members are stale right now from
+    the timeline backfill, so expect ~5 days to fully catch up, then it
+    settles into steady-state).
+  - `recompute-opportunities` (4am UTC).
+  - `daily-digest` (1pm UTC) — top 5 per category sent to a Telegram chat.
+- **Telegram bot code, built but inert without a token:**
+  - `lib/telegram/client.ts` — sendMessage helper.
+  - `app/api/telegram/webhook/route.ts` — the "input bot": DM it
+    `Name or @username - what happened` and it logs a coach note + timeline
+    event against that member. Restricted to `TELEGRAM_ADMIN_IDS` — fails
+    closed if unset.
+  - `app/api/cron/daily-digest/route.ts` — the daily digest, reusing the
+    same Opportunity Engine data the homepage shows.
+  - **To go live:** create a bot via @BotFather, then set
+    `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_IDS`, `TELEGRAM_DIGEST_CHAT_ID`,
+    and (recommended) `TELEGRAM_WEBHOOK_SECRET` in Vercel, then call
+    Telegram's `setWebhook` pointing at `/api/telegram/webhook` with that
+    same secret as `secret_token`. See `.env.example` for details on each.
+
+Only real gap left after this: **Teachable sync**, blocked on a sample
+export from Damian.
 
 ## Not in scope for this pass
 

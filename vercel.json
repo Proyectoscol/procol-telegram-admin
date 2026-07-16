@@ -1,0 +1,8 @@
+{
+  "crons": [
+    { "path": "/api/cron/mine-timelines", "schedule": "0 2 * * *" },
+    { "path": "/api/cron/regenerate-personas", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/recompute-opportunities", "schedule": "0 4 * * *" },
+    { "path": "/api/cron/daily-digest", "schedule": "0 13 * * *" }
+  ]
+}
