@@ -228,6 +228,37 @@ export default function ImportPage() {
     }
   };
 
+  const [chatSyncing, setChatSyncing] = useState(false);
+  const [chatSyncResult, setChatSyncResult] = useState<{
+    groups: {
+      telegramGroupId: string;
+      title: string;
+      messagesFetched: number;
+      messagesInserted: number;
+      reactionsInserted: number;
+      hasMore: boolean;
+      error?: string;
+    }[];
+    durationMs: number;
+  } | null>(null);
+  const [chatSyncError, setChatSyncError] = useState<string | null>(null);
+
+  const handleChatSync = async () => {
+    setChatSyncError(null);
+    setChatSyncResult(null);
+    setChatSyncing(true);
+    try {
+      const res = await fetch('/api/telegram-scraper/sync-chats', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      setChatSyncResult(data);
+    } catch (err) {
+      setChatSyncError(err instanceof Error ? err.message : 'Sync failed');
+    } finally {
+      setChatSyncing(false);
+    }
+  };
+
   const [rosterModalRole, setRosterModalRole] = useState<'main' | 'premium' | null>(null);
   const [rosterLoadingRole, setRosterLoadingRole] = useState<'main' | 'premium' | null>(null);
   const [rosterRows, setRosterRows] = useState<Record<string, unknown>[]>([]);
@@ -412,7 +443,7 @@ export default function ImportPage() {
     <div>
       <h1>Import data</h1>
       <p style={{ color: '#8b98a5', marginBottom: '1.5rem', fontSize: '0.9375rem' }}>
-        <strong>Update members</strong> (automated Telegram sync), <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), <strong>User info + profile photos</strong> (ZIP), and manual <strong>Group members</strong> / <strong>Group Members Premium</strong> CSV uploads (fallback for groups not wired into the automated sync).
+        <strong>Update members</strong> and <strong>Sync chats</strong> (automated Telegram sync), manual <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), <strong>User info + profile photos</strong> (ZIP), and manual <strong>Group members</strong> / <strong>Group Members Premium</strong> CSV uploads (fallback for groups not wired into the automated sync).
       </p>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
@@ -479,6 +510,45 @@ export default function ImportPage() {
                 <div>No group is assigned as Main or Premium yet.</div>
               )}
             </div>
+          </div>
+        )}
+      </section>
+
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Sync chats (Telegram)</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Pulls messages and reactions directly from Telegram for whichever groups have &quot;Sync chat&quot; enabled in{' '}
+          <a href="/settings">Settings → Telegram scraper</a> — no more exporting <code style={{ background: '#2f3336', padding: '0.1rem 0.35rem', borderRadius: 4 }}>result.json</code> from
+          Telegram Desktop by hand. Syncs incrementally (only new messages since last time) and is capped per click, so
+          a large first-time backfill may take a few clicks — keep clicking &quot;Sync chats&quot; until no group reports
+          &quot;more to sync&quot;.
+        </p>
+        <button type="button" className="btn" onClick={handleChatSync} disabled={chatSyncing}>
+          {chatSyncing ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Syncing…
+            </span>
+          ) : (
+            'Sync chats'
+          )}
+        </button>
+        {chatSyncError && <div className="alert alert-error" style={{ marginTop: '1rem' }}>{chatSyncError}</div>}
+        {chatSyncResult && (
+          <div className="alert alert-success" style={{ marginTop: '1rem' }}>
+            {chatSyncResult.groups.map((g) => (
+              <div key={g.telegramGroupId} style={{ marginBottom: '0.35rem' }}>
+                <strong>{g.title}</strong>:{' '}
+                {g.error ? (
+                  <span style={{ color: '#f91854' }}>{g.error}</span>
+                ) : (
+                  <>
+                    {g.messagesInserted} new message{g.messagesInserted === 1 ? '' : 's'}, {g.reactionsInserted} reaction{g.reactionsInserted === 1 ? '' : 's'}.
+                    {g.hasMore && <span style={{ color: '#f90' }}> More to sync — click again.</span>}
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </section>

@@ -492,6 +492,16 @@ CREATE TABLE IF NOT EXISTS telegram_scraper_groups (
   last_scrape_added INT,
   last_scrape_updated INT,
   last_scrape_error TEXT,
+  -- "Sync chats" (messages + reactions), independent of role — any discovered
+  -- group can be opted in, not just Main/Premium. Chat history is fetched
+  -- incrementally (resumes from MAX(messages.message_id) for this chat_id) and
+  -- capped per click (lib/telegram-scraper/chatSync.ts), so a large first-time
+  -- backfill may need a few clicks — last_chat_sync_has_more reflects that.
+  sync_chat BOOLEAN NOT NULL DEFAULT FALSE,
+  last_chat_sync_at TIMESTAMPTZ,
+  last_chat_sync_added INT,
+  last_chat_sync_has_more BOOLEAN NOT NULL DEFAULT FALSE,
+  last_chat_sync_error TEXT,
   discovered_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -81,7 +81,17 @@ export async function ingestExport(data: TelegramExport, filename: string): Prom
     await pool.query(
       `INSERT INTO users (from_id, display_name, updated_at)
        SELECT unnest($1::text[]), unnest($2::text[]), NOW()
-       ON CONFLICT (from_id) DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = NOW()`,
+       ON CONFLICT (from_id) DO UPDATE SET
+         display_name = CASE
+           -- EXCLUDED.display_name falls back to the bare from_id when the source
+           -- (e.g. a live Telegram-scraper sync that couldn't resolve a sender)
+           -- had no real name to offer — don't let that clobber a good name
+           -- already on file (Desktop's JSON export always has a real name, so
+           -- this only ever matters for the live-sync path).
+           WHEN EXCLUDED.display_name IS DISTINCT FROM EXCLUDED.from_id THEN EXCLUDED.display_name
+           ELSE COALESCE(users.display_name, EXCLUDED.display_name)
+         END,
+         updated_at = NOW()`,
       [fromIds, displayNames]
     );
   }

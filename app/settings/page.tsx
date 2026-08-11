@@ -55,6 +55,11 @@ export default function SettingsPage() {
     lastScrapeAdded: number | null;
     lastScrapeUpdated: number | null;
     lastScrapeError: string | null;
+    syncChat: boolean;
+    lastChatSyncAt: string | null;
+    lastChatSyncAdded: number | null;
+    lastChatSyncHasMore: boolean;
+    lastChatSyncError: string | null;
   };
   const [scraperLoading, setScraperLoading] = useState(true);
   const [scraperAccount, setScraperAccount] = useState<{
@@ -465,6 +470,22 @@ export default function SettingsPage() {
     }
   };
 
+  const handleScraperSetSyncChat = async (groupId: number, syncChat: boolean) => {
+    setScraperMessage(null);
+    try {
+      const res = await fetch(`/api/telegram-scraper/groups/${groupId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncChat }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update chat sync');
+      setScraperGroups(Array.isArray(data.groups) ? data.groups : []);
+    } catch (err) {
+      setScraperMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to update chat sync' });
+    }
+  };
+
   if (loading) {
     return (
       <LoadingCard message="Loading settings…" />
@@ -693,6 +714,9 @@ export default function SettingsPage() {
                   </p>
                 ) : (
                   <div className="table-wrap" style={{ overflowX: 'auto' }}>
+                    <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
+                      &quot;Sync chat&quot; is independent of Role — check it for any group whose messages/reactions you want the <a href="/import">Import page&apos;s &quot;Sync chats&quot;</a> button to pull automatically instead of uploading Telegram Desktop&apos;s exported JSON by hand.
+                    </p>
                     <table>
                       <thead>
                         <tr>
@@ -700,6 +724,8 @@ export default function SettingsPage() {
                           <th>Role</th>
                           <th>Last synced</th>
                           <th>Members</th>
+                          <th>Sync chat</th>
+                          <th>Last chat sync</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -724,6 +750,25 @@ export default function SettingsPage() {
                               )}
                             </td>
                             <td>{g.memberCount ?? '—'}</td>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={g.syncChat}
+                                onChange={(e) => handleScraperSetSyncChat(g.id, e.target.checked)}
+                              />
+                            </td>
+                            <td style={{ fontSize: '0.8125rem' }}>
+                              {g.lastChatSyncAt ? new Date(g.lastChatSyncAt).toLocaleString() : '—'}
+                              {g.lastChatSyncAt && (
+                                <div style={{ color: '#8b98a5' }}>
+                                  {g.lastChatSyncAdded ?? 0} new message{g.lastChatSyncAdded === 1 ? '' : 's'}
+                                  {g.lastChatSyncHasMore && ' — more to sync'}
+                                </div>
+                              )}
+                              {g.lastChatSyncError && (
+                                <div style={{ color: '#f91854', marginTop: '0.15rem' }}>{g.lastChatSyncError}</div>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

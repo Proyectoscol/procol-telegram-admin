@@ -14,6 +14,11 @@ export interface ScraperGroup {
   lastScrapeAdded: number | null;
   lastScrapeUpdated: number | null;
   lastScrapeError: string | null;
+  syncChat: boolean;
+  lastChatSyncAt: string | null;
+  lastChatSyncAdded: number | null;
+  lastChatSyncHasMore: boolean;
+  lastChatSyncError: string | null;
 }
 
 interface GroupRow {
@@ -26,6 +31,11 @@ interface GroupRow {
   last_scrape_added: number | null;
   last_scrape_updated: number | null;
   last_scrape_error: string | null;
+  sync_chat: boolean;
+  last_chat_sync_at: string | null;
+  last_chat_sync_added: number | null;
+  last_chat_sync_has_more: boolean;
+  last_chat_sync_error: string | null;
 }
 
 function mapRow(row: GroupRow): ScraperGroup {
@@ -39,6 +49,11 @@ function mapRow(row: GroupRow): ScraperGroup {
     lastScrapeAdded: row.last_scrape_added,
     lastScrapeUpdated: row.last_scrape_updated,
     lastScrapeError: row.last_scrape_error,
+    syncChat: row.sync_chat,
+    lastChatSyncAt: row.last_chat_sync_at,
+    lastChatSyncAdded: row.last_chat_sync_added,
+    lastChatSyncHasMore: row.last_chat_sync_has_more,
+    lastChatSyncError: row.last_chat_sync_error,
   };
 }
 
@@ -101,4 +116,13 @@ export async function setGroupRole(id: number, role: GroupRole | null): Promise<
   } finally {
     client.release();
   }
+}
+
+/** Toggles whether "Sync chats" pulls this group's message/reaction history. Independent of role — any discovered group can opt in. */
+export async function setGroupSyncChat(id: number, syncChat: boolean): Promise<void> {
+  await ensureSchema();
+  await pool.query(
+    `UPDATE telegram_scraper_groups SET sync_chat = $1, updated_at = NOW() WHERE id = $2`,
+    [syncChat, id]
+  );
 }
