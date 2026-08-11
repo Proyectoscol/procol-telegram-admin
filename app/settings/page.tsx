@@ -44,6 +44,54 @@ export default function SettingsPage() {
   const [aiUsageTotal, setAiUsageTotal] = useState<number>(0);
   const [aiUsageSummary, setAiUsageSummary] = useState<{ total_runs: number; total_prompt_tokens: number; total_completion_tokens: number; total_tokens: number; total_cost_usd: number } | null>(null);
 
+  // Telegram scraper (GramJS login + Main/Premium group role assignment)
+  type ScraperGroup = {
+    id: number;
+    telegramGroupId: string;
+    title: string;
+    role: 'main' | 'premium' | null;
+    memberCount: number | null;
+    lastScrapedAt: string | null;
+    lastScrapeAdded: number | null;
+    lastScrapeUpdated: number | null;
+    lastScrapeError: string | null;
+  };
+  const [scraperLoading, setScraperLoading] = useState(true);
+  const [scraperAccount, setScraperAccount] = useState<{
+    configured: boolean;
+    status: 'disconnected' | 'pending_code' | 'pending_password' | 'connected' | 'error';
+    phoneNumberDisplay: string | null;
+    lastConnectedAt: string | null;
+    lastError: string | null;
+  } | null>(null);
+  const [scraperGroups, setScraperGroups] = useState<ScraperGroup[]>([]);
+  const [scraperApiId, setScraperApiId] = useState('');
+  const [scraperApiHash, setScraperApiHash] = useState('');
+  const [scraperPhone, setScraperPhone] = useState('');
+  const [scraperCode, setScraperCode] = useState('');
+  const [scraperPassword, setScraperPassword] = useState('');
+  const [scraperBusy, setScraperBusy] = useState(false);
+  const [scraperDiscovering, setScraperDiscovering] = useState(false);
+  const [scraperMessage, setScraperMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+
+  const fetchScraperStatus = async () => {
+    try {
+      const res = await fetch('/api/telegram-scraper/status');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load status');
+      setScraperAccount(data.account);
+      setScraperGroups(Array.isArray(data.groups) ? data.groups : []);
+    } catch (err) {
+      setScraperMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load status' });
+    } finally {
+      setScraperLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchScraperStatus();
+  }, []);
+
   useEffect(() => {
     const ctrl = new AbortController();
     fetch('/api/bootstrap/settings', { signal: ctrl.signal })
@@ -274,6 +322,149 @@ export default function SettingsPage() {
     }
   };
 
+  const handleScraperConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setScraperMessage(null);
+    setScraperBusy(true);
+    try {
+      const res = await fetch('/api/telegram-scraper/login/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiId: scraperApiId.trim(), apiHash: scraperApiHash.trim(), phoneNumber: scraperPhone.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to start login');
+      if (data.status === 'error') {
+        setScraperMessage({ type: 'error', text: data.error || 'Login failed' });
+      } else if (data.status === 'connected') {
+        setScraperMessage({ type: 'ok', text: 'Connected to Telegram.' });
+        setScraperApiId('');
+        setScraperApiHash('');
+        setScraperPhone('');
+      }
+      await fetchScraperStatus();
+    } catch (err) {
+      setScraperMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to start login' });
+    } finally {
+      setScraperBusy(false);
+    }
+  };
+
+  const handleScraperSubmitCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setScraperMessage(null);
+    setScraperBusy(true);
+    try {
+      const res = await fetch('/api/telegram-scraper/login/code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: scraperCode.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit code');
+      if (data.status === 'error') {
+        setScraperMessage({ type: 'error', text: data.error || 'Invalid code, try again.' });
+      } else if (data.status === 'connected') {
+        setScraperMessage({ type: 'ok', text: 'Connected to Telegram.' });
+        setScraperCode('');
+      } else if (data.status === 'pending_password') {
+        setScraperCode('');
+      }
+      await fetchScraperStatus();
+    } catch (err) {
+      setScraperMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to submit code' });
+    } finally {
+      setScraperBusy(false);
+    }
+  };
+
+  const handleScraperSubmitPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setScraperMessage(null);
+    setScraperBusy(true);
+    try {
+      const res = await fetch('/api/telegram-scraper/login/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: scraperPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit password');
+      if (data.status === 'error') {
+        setScraperMessage({ type: 'error', text: data.error || 'Wrong password, try again.' });
+      } else if (data.status === 'connected') {
+        setScraperMessage({ type: 'ok', text: 'Connected to Telegram.' });
+        setScraperPassword('');
+      }
+      await fetchScraperStatus();
+    } catch (err) {
+      setScraperMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to submit password' });
+    } finally {
+      setScraperBusy(false);
+    }
+  };
+
+  const handleScraperCancel = async () => {
+    setScraperMessage(null);
+    setScraperBusy(true);
+    try {
+      await fetch('/api/telegram-scraper/login/cancel', { method: 'POST' });
+      setScraperCode('');
+      setScraperPassword('');
+      await fetchScraperStatus();
+    } finally {
+      setScraperBusy(false);
+    }
+  };
+
+  const handleScraperDisconnect = async () => {
+    setScraperMessage(null);
+    setScraperBusy(true);
+    try {
+      const res = await fetch('/api/telegram-scraper/account', { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to disconnect');
+      setScraperMessage({ type: 'ok', text: 'Disconnected. Your credentials and session were deleted.' });
+      await fetchScraperStatus();
+    } catch (err) {
+      setScraperMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to disconnect' });
+    } finally {
+      setScraperBusy(false);
+    }
+  };
+
+  const handleScraperDiscover = async () => {
+    setScraperMessage(null);
+    setScraperDiscovering(true);
+    try {
+      const res = await fetch('/api/telegram-scraper/groups/discover', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to discover groups');
+      setScraperGroups(Array.isArray(data.groups) ? data.groups : []);
+      setScraperMessage({ type: 'ok', text: `Found ${data.groups?.length ?? 0} group(s). Assign Main and Premium below.` });
+    } catch (err) {
+      setScraperMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to discover groups' });
+    } finally {
+      setScraperDiscovering(false);
+    }
+  };
+
+  const handleScraperSetRole = async (groupId: number, role: 'main' | 'premium' | null) => {
+    setScraperMessage(null);
+    try {
+      const res = await fetch(`/api/telegram-scraper/groups/${groupId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update role');
+      setScraperGroups(Array.isArray(data.groups) ? data.groups : []);
+    } catch (err) {
+      setScraperMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to update role' });
+    }
+  };
+
   if (loading) {
     return (
       <LoadingCard message="Loading settings…" />
@@ -365,6 +556,197 @@ export default function SettingsPage() {
             }}
           >
             {message.text}
+          </p>
+        )}
+      </div>
+
+      <div className="card" style={{ marginTop: '1.5rem' }}>
+        <h2 style={{ marginTop: 0 }}>Telegram scraper</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Logs in with a Telegram user account (not the bot) so the <a href="/import">Import page&apos;s &quot;Actualizar miembros&quot;</a> button
+          can sync group members automatically instead of running the scraper script by hand and uploading CSVs. Get an{' '}
+          <code style={{ background: '#2f3336', padding: '0.1rem 0.35rem', borderRadius: 4 }}>api_id</code> /{' '}
+          <code style={{ background: '#2f3336', padding: '0.1rem 0.35rem', borderRadius: 4 }}>api_hash</code> from{' '}
+          my.telegram.org. Credentials and the login session are encrypted in the database.
+        </p>
+
+        {scraperLoading ? (
+          <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>Loading…</p>
+        ) : (
+          <>
+            {(!scraperAccount || scraperAccount.status === 'disconnected' || scraperAccount.status === 'error') && (
+              <form onSubmit={handleScraperConnect}>
+                {scraperAccount?.status === 'error' && scraperAccount.lastError && (
+                  <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{scraperAccount.lastError}</div>
+                )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+                  <label style={{ display: 'block' }}>
+                    <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.875rem' }}>API ID</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={scraperApiId}
+                      onChange={(e) => setScraperApiId(e.target.value)}
+                      placeholder="12345678"
+                      style={{ padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea', width: 160 }}
+                    />
+                  </label>
+                  <label style={{ display: 'block' }}>
+                    <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.875rem' }}>API hash</span>
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={scraperApiHash}
+                      onChange={(e) => setScraperApiHash(e.target.value)}
+                      placeholder="d0895e7cb323ad815ce84c9d574e4ba5"
+                      style={{ padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea', width: 260 }}
+                    />
+                  </label>
+                  <label style={{ display: 'block' }}>
+                    <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.875rem' }}>Phone number</span>
+                    <input
+                      type="text"
+                      value={scraperPhone}
+                      onChange={(e) => setScraperPhone(e.target.value)}
+                      placeholder="+573001234567"
+                      style={{ padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea', width: 180 }}
+                    />
+                  </label>
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={scraperBusy || !scraperApiId.trim() || !scraperApiHash.trim() || !scraperPhone.trim()}>
+                  {scraperBusy ? 'Sending code…' : 'Connect'}
+                </button>
+              </form>
+            )}
+
+            {scraperAccount?.status === 'pending_code' && (
+              <form onSubmit={handleScraperSubmitCode}>
+                <p style={{ fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+                  Enter the login code Telegram just sent to <strong>{scraperAccount.phoneNumberDisplay}</strong>.
+                </p>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'block' }}>
+                    <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.875rem' }}>Code</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoFocus
+                      value={scraperCode}
+                      onChange={(e) => setScraperCode(e.target.value)}
+                      placeholder="12345"
+                      style={{ padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea', width: 140 }}
+                    />
+                  </label>
+                  <button type="submit" className="btn btn-primary" disabled={scraperBusy || !scraperCode.trim()}>
+                    {scraperBusy ? 'Verifying…' : 'Verify code'}
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={handleScraperCancel} disabled={scraperBusy}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {scraperAccount?.status === 'pending_password' && (
+              <form onSubmit={handleScraperSubmitPassword}>
+                <p style={{ fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+                  This account has two-step verification (2FA) enabled. Enter the password.
+                </p>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'block' }}>
+                    <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.875rem' }}>2FA password</span>
+                    <input
+                      type="password"
+                      autoFocus
+                      value={scraperPassword}
+                      onChange={(e) => setScraperPassword(e.target.value)}
+                      style={{ padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea', width: 220 }}
+                    />
+                  </label>
+                  <button type="submit" className="btn btn-primary" disabled={scraperBusy || !scraperPassword}>
+                    {scraperBusy ? 'Verifying…' : 'Verify password'}
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={handleScraperCancel} disabled={scraperBusy}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {scraperAccount?.status === 'connected' && (
+              <div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem' }}>
+                  <span style={{ color: '#00ba7c', fontSize: '0.875rem' }}>
+                    ✓ Connected as {scraperAccount.phoneNumberDisplay}
+                  </span>
+                  <button type="button" className="btn btn-secondary" onClick={handleScraperDiscover} disabled={scraperDiscovering}>
+                    {scraperDiscovering ? 'Discovering…' : 'Discover groups'}
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={handleScraperDisconnect} disabled={scraperBusy}>
+                    Disconnect
+                  </button>
+                </div>
+
+                {scraperGroups.length === 0 ? (
+                  <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
+                    No groups discovered yet. Click &quot;Discover groups&quot; to list the megagroups this account belongs to, then assign which one is Main and which is Premium.
+                  </p>
+                ) : (
+                  <div className="table-wrap" style={{ overflowX: 'auto' }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Group</th>
+                          <th>Role</th>
+                          <th>Last synced</th>
+                          <th>Members</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scraperGroups.map((g) => (
+                          <tr key={g.id}>
+                            <td>{g.title}</td>
+                            <td>
+                              <select
+                                value={g.role ?? ''}
+                                onChange={(e) => handleScraperSetRole(g.id, (e.target.value || null) as 'main' | 'premium' | null)}
+                                style={{ padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
+                              >
+                                <option value="">— unassigned —</option>
+                                <option value="main">Main</option>
+                                <option value="premium">Premium</option>
+                              </select>
+                            </td>
+                            <td style={{ fontSize: '0.8125rem' }}>
+                              {g.lastScrapedAt ? new Date(g.lastScrapedAt).toLocaleString() : '—'}
+                              {g.lastScrapeError && (
+                                <div style={{ color: '#f91854', marginTop: '0.15rem' }}>{g.lastScrapeError}</div>
+                              )}
+                            </td>
+                            <td>{g.memberCount ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {scraperMessage && (
+          <p
+            style={{
+              marginTop: '1rem',
+              padding: '0.5rem 0.75rem',
+              borderRadius: 6,
+              background: scraperMessage.type === 'ok' ? 'rgba(0,186,124,0.15)' : 'rgba(249,24,84,0.15)',
+              color: scraperMessage.type === 'ok' ? '#00ba7c' : '#f91854',
+              fontSize: '0.875rem',
+            }}
+          >
+            {scraperMessage.text}
           </p>
         )}
       </div>

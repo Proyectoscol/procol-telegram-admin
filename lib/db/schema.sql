@@ -452,3 +452,47 @@ CREATE INDEX IF NOT EXISTS idx_users_is_lifetime ON users(is_lifetime) WHERE is_
 -- touches rows that need it, so this is a no-op after the first run.
 UPDATE users SET is_lifetime = TRUE, lifetime_since = COALESCE(lifetime_since, premium_since, NOW())
 WHERE is_premium = TRUE AND COALESCE(is_lifetime, FALSE) = FALSE;
+
+-- ============================================================
+-- Telegram member scraper (Settings → Telegram scraper). Logs in as a real
+-- Telegram user account (via GramJS/MTProto, not the bot API) so "Actualizar
+-- miembros" can list group participants directly, instead of running
+-- member_go.py by hand and uploading the CSV. Single-row singleton: one
+-- Telegram account drives the scraper. api_id/api_hash/phone_number and
+-- session_string are AES-256-GCM encrypted (lib/crypto/secretBox.ts) before
+-- being stored here — never stored in plaintext.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS telegram_scraper_account (
+  id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  api_id TEXT NOT NULL,
+  api_hash TEXT NOT NULL,
+  phone_number TEXT NOT NULL,
+  phone_number_display TEXT, -- unencrypted, masked (e.g. +57 *** ** 93) for UI display only
+  session_string TEXT, -- NULL until login completes
+  status TEXT NOT NULL DEFAULT 'disconnected' CHECK (status IN ('disconnected', 'pending_code', 'pending_password', 'connected', 'error')),
+  last_error TEXT,
+  last_connected_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Groups discovered from the logged-in account's dialog list (megagroups
+-- only). "role" maps a real Telegram group to what the CRM does with it on
+-- refresh: 'main' -> applyMembersSnapshot (full membership sync), 'premium'
+-- -> applyMembersPremiumSnapshot (marks matched users premium). At most one
+-- group can hold each role (enforced below); other discovered groups are
+-- listed but left unassigned/untouched by "Actualizar miembros".
+CREATE TABLE IF NOT EXISTS telegram_scraper_groups (
+  id SERIAL PRIMARY KEY,
+  telegram_group_id BIGINT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  role TEXT CHECK (role IN ('main', 'premium')),
+  member_count INT,
+  last_scraped_at TIMESTAMPTZ,
+  last_scrape_added INT,
+  last_scrape_updated INT,
+  last_scrape_error TEXT,
+  discovered_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_scraper_groups_role ON telegram_scraper_groups(role) WHERE role IS NOT NULL;

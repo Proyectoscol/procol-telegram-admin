@@ -193,6 +193,30 @@ export default function ImportPage() {
     }
   };
 
+  const [scraperRefreshing, setScraperRefreshing] = useState(false);
+  const [scraperRefreshResult, setScraperRefreshResult] = useState<{
+    main: { groupTitle: string; telegramGroupId: string; memberCount: number; added?: number; updated?: number; error?: string } | null;
+    premium: { groupTitle: string; telegramGroupId: string; memberCount: number; updated?: number; error?: string } | null;
+    durationMs: number;
+  } | null>(null);
+  const [scraperRefreshError, setScraperRefreshError] = useState<string | null>(null);
+
+  const handleScraperRefresh = async () => {
+    setScraperRefreshError(null);
+    setScraperRefreshResult(null);
+    setScraperRefreshing(true);
+    try {
+      const res = await fetch('/api/telegram-scraper/refresh', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Refresh failed');
+      setScraperRefreshResult(data);
+    } catch (err) {
+      setScraperRefreshError(err instanceof Error ? err.message : 'Refresh failed');
+    } finally {
+      setScraperRefreshing(false);
+    }
+  };
+
   const [photosZipFile, setPhotosZipFile] = useState<File | null>(null);
   const [photosLoading, setPhotosLoading] = useState(false);
   const [photosResult, setPhotosResult] = useState<{
@@ -356,8 +380,53 @@ export default function ImportPage() {
     <div>
       <h1>Import data</h1>
       <p style={{ color: '#8b98a5', marginBottom: '1.5rem', fontSize: '0.9375rem' }}>
-        <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), <strong>User info + profile photos</strong> (ZIP), <strong>Group members</strong> (weekly snapshot), and <strong>Group Members Premium</strong> (weekly snapshot to set is_premium).
+        <strong>Actualizar miembros</strong> (automated Telegram sync), <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), <strong>User info + profile photos</strong> (ZIP), and manual <strong>Group members</strong> / <strong>Group Members Premium</strong> CSV uploads (fallback for groups not wired into the automated sync).
       </p>
+
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Actualizar miembros (Telegram)</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Scrapes the Main and Premium groups directly from Telegram and applies the same updates as the manual CSV
+          imports below — no script to run, no files to upload. Requires connecting a Telegram account and assigning
+          the Main/Premium groups first in <a href="/settings">Settings → Telegram scraper</a>.
+        </p>
+        <button type="button" className="btn" onClick={handleScraperRefresh} disabled={scraperRefreshing}>
+          {scraperRefreshing ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Actualizando…
+            </span>
+          ) : (
+            'Actualizar miembros'
+          )}
+        </button>
+        {scraperRefreshError && <div className="alert alert-error" style={{ marginTop: '1rem' }}>{scraperRefreshError}</div>}
+        {scraperRefreshResult && (
+          <div className="alert alert-success" style={{ marginTop: '1rem' }}>
+            <div>
+              {scraperRefreshResult.main && (
+                <div>
+                  <strong>Main</strong> ({scraperRefreshResult.main.groupTitle}):{' '}
+                  {scraperRefreshResult.main.error
+                    ? <span style={{ color: '#f91854' }}>{scraperRefreshResult.main.error}</span>
+                    : <>{scraperRefreshResult.main.memberCount} members — added {scraperRefreshResult.main.added}, updated {scraperRefreshResult.main.updated}.</>}
+                </div>
+              )}
+              {scraperRefreshResult.premium && (
+                <div style={{ marginTop: scraperRefreshResult.main ? '0.35rem' : 0 }}>
+                  <strong>Premium</strong> ({scraperRefreshResult.premium.groupTitle}):{' '}
+                  {scraperRefreshResult.premium.error
+                    ? <span style={{ color: '#f91854' }}>{scraperRefreshResult.premium.error}</span>
+                    : <>{scraperRefreshResult.premium.memberCount} members — marked premium {scraperRefreshResult.premium.updated}.</>}
+                </div>
+              )}
+              {!scraperRefreshResult.main && !scraperRefreshResult.premium && (
+                <div>No group is assigned as Main or Premium yet.</div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Chat export (messages &amp; reactions)</h2>
