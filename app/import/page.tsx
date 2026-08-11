@@ -3,6 +3,17 @@
 import { useState, useRef } from 'react';
 import { upload } from '@vercel/blob/client';
 import { LoadingSpinner } from '@/components/Loading';
+import { ExportCsvModal, type ExportColumn } from '@/components/ExportCsvModal';
+
+const ROSTER_EXPORT_COLUMNS: ExportColumn[] = [
+  { key: 'from_id', label: 'User ID' },
+  { key: 'username', label: 'Username' },
+  { key: 'display_name', label: 'Contact' },
+  { key: 'is_current_member', label: 'Member' },
+  { key: 'is_premium', label: 'Premium' },
+  { key: 'messages_sent', label: 'Messages' },
+  { key: 'reactions_given', label: 'Reactions given' },
+];
 
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -217,6 +228,27 @@ export default function ImportPage() {
     }
   };
 
+  const [rosterModalRole, setRosterModalRole] = useState<'main' | 'premium' | null>(null);
+  const [rosterLoadingRole, setRosterLoadingRole] = useState<'main' | 'premium' | null>(null);
+  const [rosterRows, setRosterRows] = useState<Record<string, unknown>[]>([]);
+  const [rosterError, setRosterError] = useState<string | null>(null);
+
+  const openRosterModal = async (role: 'main' | 'premium') => {
+    setRosterError(null);
+    setRosterLoadingRole(role);
+    try {
+      const res = await fetch(`/api/members/roster?role=${role}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load members');
+      setRosterRows(Array.isArray(data.rows) ? data.rows : []);
+      setRosterModalRole(role);
+    } catch (err) {
+      setRosterError(err instanceof Error ? err.message : 'Failed to load members');
+    } finally {
+      setRosterLoadingRole(null);
+    }
+  };
+
   const [photosZipFile, setPhotosZipFile] = useState<File | null>(null);
   const [photosLoading, setPhotosLoading] = useState(false);
   const [photosResult, setPhotosResult] = useState<{
@@ -380,26 +412,49 @@ export default function ImportPage() {
     <div>
       <h1>Import data</h1>
       <p style={{ color: '#8b98a5', marginBottom: '1.5rem', fontSize: '0.9375rem' }}>
-        <strong>Actualizar miembros</strong> (automated Telegram sync), <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), <strong>User info + profile photos</strong> (ZIP), and manual <strong>Group members</strong> / <strong>Group Members Premium</strong> CSV uploads (fallback for groups not wired into the automated sync).
+        <strong>Update members</strong> (automated Telegram sync), <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), <strong>User info + profile photos</strong> (ZIP), and manual <strong>Group members</strong> / <strong>Group Members Premium</strong> CSV uploads (fallback for groups not wired into the automated sync).
       </p>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Actualizar miembros (Telegram)</h2>
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Update members (Telegram)</h2>
         <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
           Scrapes the Main and Premium groups directly from Telegram and applies the same updates as the manual CSV
           imports below — no script to run, no files to upload. Requires connecting a Telegram account and assigning
           the Main/Premium groups first in <a href="/settings">Settings → Telegram scraper</a>.
         </p>
-        <button type="button" className="btn" onClick={handleScraperRefresh} disabled={scraperRefreshing}>
-          {scraperRefreshing ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-              <LoadingSpinner size="sm" />
-              Actualizando…
-            </span>
-          ) : (
-            'Actualizar miembros'
-          )}
-        </button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <button type="button" className="btn" onClick={handleScraperRefresh} disabled={scraperRefreshing}>
+            {scraperRefreshing ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LoadingSpinner size="sm" />
+                Updating…
+              </span>
+            ) : (
+              'Update members'
+            )}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => openRosterModal('main')} disabled={rosterLoadingRole === 'main'}>
+            {rosterLoadingRole === 'main' ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LoadingSpinner size="sm" />
+                Loading…
+              </span>
+            ) : (
+              'Copy Main members'
+            )}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => openRosterModal('premium')} disabled={rosterLoadingRole === 'premium'}>
+            {rosterLoadingRole === 'premium' ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LoadingSpinner size="sm" />
+                Loading…
+              </span>
+            ) : (
+              'Copy Premium members'
+            )}
+          </button>
+        </div>
+        {rosterError && <div className="alert alert-error" style={{ marginTop: '1rem' }}>{rosterError}</div>}
         {scraperRefreshError && <div className="alert alert-error" style={{ marginTop: '1rem' }}>{scraperRefreshError}</div>}
         {scraperRefreshResult && (
           <div className="alert alert-success" style={{ marginTop: '1rem' }}>
@@ -427,6 +482,15 @@ export default function ImportPage() {
           </div>
         )}
       </section>
+
+      <ExportCsvModal
+        open={rosterModalRole !== null}
+        onClose={() => setRosterModalRole(null)}
+        title={rosterModalRole === 'main' ? 'Main members' : 'Premium members'}
+        filenamePrefix={rosterModalRole === 'main' ? 'main-members' : 'premium-members'}
+        rows={rosterRows}
+        columns={ROSTER_EXPORT_COLUMNS}
+      />
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Chat export (messages &amp; reactions)</h2>

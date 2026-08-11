@@ -1,5 +1,5 @@
 /**
- * The "Actualizar miembros" action: one MTProto session, scrape the
+ * The "Update members" action: one MTProto session, scrape the
  * Main-role and Premium-role groups (if assigned), and apply the same DB
  * writes the manual CSV import used to do (lib/import/membersSnapshot.ts).
  *

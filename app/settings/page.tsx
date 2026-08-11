@@ -563,7 +563,7 @@ export default function SettingsPage() {
       <div className="card" style={{ marginTop: '1.5rem' }}>
         <h2 style={{ marginTop: 0 }}>Telegram scraper</h2>
         <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
-          Logs in with a Telegram user account (not the bot) so the <a href="/import">Import page&apos;s &quot;Actualizar miembros&quot;</a> button
+          Logs in with a Telegram user account (not the bot) so the <a href="/import">Import page&apos;s &quot;Update members&quot;</a> button
           can sync group members automatically instead of running the scraper script by hand and uploading CSVs. Get an{' '}
           <code style={{ background: '#2f3336', padding: '0.1rem 0.35rem', borderRadius: 4 }}>api_id</code> /{' '}
           <code style={{ background: '#2f3336', padding: '0.1rem 0.35rem', borderRadius: 4 }}>api_hash</code> from{' '}

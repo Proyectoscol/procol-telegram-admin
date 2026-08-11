@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // scraping + upserting a large group can take a while
 
-/** POST /api/telegram-scraper/refresh — the "Actualizar miembros" button. Scrapes the Main/Premium-role groups and applies the same DB writes as the manual CSV import. */
+/** POST /api/telegram-scraper/refresh — the "Update members" button. Scrapes the Main/Premium-role groups and applies the same DB writes as the manual CSV import. */
 export async function POST() {
   try {
     const result = await refreshMembers();
