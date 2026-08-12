@@ -28,10 +28,21 @@ export interface MembersSnapshotResult {
 }
 
 /**
- * 1. Resets is_current_member = FALSE for all users previously in the group
- *    (via messages/reactions in chat_id = groupId, or everyone if groupId is
- *    unknown).
+ * 1. Resets is_current_member = FALSE for every user.
  * 2. Upserts each row, setting is_current_member = TRUE.
+ *
+ * The reset is unconditional (not scoped to "users with messages/reactions
+ * in this chat") because is_current_member has exactly one writer in the
+ * whole codebase: this function. It represents "currently in the Main
+ * group, per the latest full snapshot" — nothing else ever sets it. An
+ * earlier version scoped the reset to message/reaction senders in that
+ * chat_id as a proxy for "previously known members", to avoid a full
+ * table reset; but that proxy misses lurkers (members who never post or
+ * react) — when a lurker left the group, they'd never get reset to FALSE,
+ * so stale "members" silently accumulated over repeated syncs. Since each
+ * call's `rows` is now a complete, authoritative participant list (a live
+ * Telegram scrape, or a full CSV export), a full reset is correct and
+ * self-healing — it can only ever shrink to the true current set.
  */
 export async function applyMembersSnapshot(
   rows: MemberRow[],
@@ -50,21 +61,8 @@ export async function applyMembersSnapshot(
   try {
     await client.query('BEGIN');
 
-    if (groupId !== null) {
-      await client.query(
-        `UPDATE users SET is_current_member = FALSE, updated_at = NOW()
-         WHERE from_id IN (
-           SELECT DISTINCT from_id FROM messages WHERE chat_id = $1 AND from_id IS NOT NULL
-           UNION
-           SELECT DISTINCT reactor_from_id FROM reactions WHERE chat_id = $1
-         )`,
-        [String(groupId)]
-      );
-      log.startup(`[members-import] Reset is_current_member=FALSE for group ${groupId}`);
-    } else {
-      await client.query(`UPDATE users SET is_current_member = FALSE, updated_at = NOW()`);
-      log.startup(`[members-import] Reset is_current_member=FALSE for all users (no groupId)`);
-    }
+    await client.query(`UPDATE users SET is_current_member = FALSE, updated_at = NOW() WHERE is_current_member = TRUE`);
+    log.startup(`[members-import] Reset is_current_member=FALSE for all users`);
 
     const fromIds = rows.map((r) => r.fromId);
     const existingRes = await client.query<{ from_id: string }>(
