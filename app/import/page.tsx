@@ -216,6 +216,34 @@ export default function ImportPage() {
     }
   };
 
+  const [profileSyncing, setProfileSyncing] = useState(false);
+  const [profileSyncResult, setProfileSyncResult] = useState<{
+    usersProcessed: number;
+    usersFailed: number;
+    photosDownloaded: number;
+    hasMore: boolean;
+    floodWaitSeconds?: number;
+    durationMs: number;
+    errors: string[];
+  } | null>(null);
+  const [profileSyncError, setProfileSyncError] = useState<string | null>(null);
+
+  const handleProfileSync = async () => {
+    setProfileSyncError(null);
+    setProfileSyncResult(null);
+    setProfileSyncing(true);
+    try {
+      const res = await fetch('/api/telegram-scraper/sync-profiles', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      setProfileSyncResult(data);
+    } catch (err) {
+      setProfileSyncError(err instanceof Error ? err.message : 'Sync failed');
+    } finally {
+      setProfileSyncing(false);
+    }
+  };
+
   const [rosterModalRole, setRosterModalRole] = useState<'main' | 'premium' | null>(null);
   const [rosterLoadingRole, setRosterLoadingRole] = useState<'main' | 'premium' | null>(null);
   const [rosterRows, setRosterRows] = useState<Record<string, unknown>[]>([]);
@@ -310,7 +338,7 @@ export default function ImportPage() {
     <div>
       <h1>Import data</h1>
       <p style={{ color: '#8b98a5', marginBottom: '1.5rem', fontSize: '0.9375rem' }}>
-        <strong>Update members</strong> and <strong>Sync chats</strong> (automated Telegram sync), <strong>User info</strong> (profile data), and <strong>User info + profile photos</strong> (ZIP).
+        <strong>Update members</strong>, <strong>Sync chats</strong>, and <strong>Sync profiles</strong> (automated Telegram sync), <strong>User info</strong> (profile data), and manual <strong>User info + profile photos</strong> (ZIP, fallback).
       </p>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
@@ -416,6 +444,54 @@ export default function ImportPage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Sync profiles (Telegram)</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Pulls each current Main/Premium member&apos;s bio, verified/premium/fake/bot status, online status, and every
+          profile photo they&apos;ve ever set, directly from Telegram — replacing the manual &quot;User info + profile
+          photos (ZIP)&quot; upload below. Profile lookups are rate-limited by Telegram more aggressively than messages, so
+          this processes a batch at a time (oldest/never-synced first) — click &quot;Sync profiles&quot; again to continue
+          until it reports nothing left to sync.
+        </p>
+        <button type="button" className="btn" onClick={handleProfileSync} disabled={profileSyncing}>
+          {profileSyncing ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Syncing…
+            </span>
+          ) : (
+            'Sync profiles'
+          )}
+        </button>
+        {profileSyncError && <div className="alert alert-error" style={{ marginTop: '1rem' }}>{profileSyncError}</div>}
+        {profileSyncResult && (
+          <div className="alert alert-success" style={{ marginTop: '1rem' }}>
+            {profileSyncResult.usersProcessed === 0 && !profileSyncResult.hasMore ? (
+              <div>Nothing to sync right now — every tracked member was synced in the last 24 hours.</div>
+            ) : (
+              <div>
+                Synced {profileSyncResult.usersProcessed} profile{profileSyncResult.usersProcessed === 1 ? '' : 's'}, downloaded {profileSyncResult.photosDownloaded} new photo{profileSyncResult.photosDownloaded === 1 ? '' : 's'}.
+                {profileSyncResult.usersFailed > 0 && <span> {profileSyncResult.usersFailed} failed.</span>}
+                {profileSyncResult.hasMore && !profileSyncResult.floodWaitSeconds && <span style={{ color: '#f90' }}> More to sync — click again.</span>}
+                {profileSyncResult.floodWaitSeconds != null && (
+                  <span style={{ color: '#f90' }}> Telegram asked us to slow down — wait about {Math.ceil(profileSyncResult.floodWaitSeconds / 60)} min before clicking again.</span>
+                )}
+              </div>
+            )}
+            {profileSyncResult.errors.length > 0 && (
+              <details style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
+                <summary>First errors</summary>
+                <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
+                  {profileSyncResult.errors.slice(0, 10).map((e, i) => (
+                    <li key={i} style={{ marginBottom: '0.25rem' }}>{e}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
         )}
       </section>

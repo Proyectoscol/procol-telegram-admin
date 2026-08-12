@@ -87,6 +87,15 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'premium_since') THEN
     ALTER TABLE users ADD COLUMN premium_since TIMESTAMPTZ;
   END IF;
+  -- "Sync profiles" (Settings → Telegram scraper): when this user's bio,
+  -- verified/premium/fake/bot flags, status, and profile photos were last
+  -- pulled live via MTProto (users.GetFullUser + photos.getUserPhotos).
+  -- NULL = never synced. Drives incremental batching (oldest/NULL first)
+  -- so repeated clicks page through the membership without re-fetching
+  -- freshly-synced profiles — see lib/telegram-scraper/profileSync.ts.
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'telegram_profile_synced_at') THEN
+    ALTER TABLE users ADD COLUMN telegram_profile_synced_at TIMESTAMPTZ;
+  END IF;
 END $$;
 CREATE INDEX IF NOT EXISTS idx_users_current_member ON users(is_current_member) WHERE is_current_member = TRUE;
 CREATE INDEX IF NOT EXISTS idx_users_is_premium ON users(is_premium) WHERE is_premium = TRUE;
