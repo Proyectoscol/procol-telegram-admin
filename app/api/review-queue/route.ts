@@ -5,6 +5,14 @@ import { ensureSchema, pool } from '@/lib/db/client';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+interface AiSuggestion {
+  userId: number;
+  displayName: string | null;
+  username: string | null;
+  confidence: number;
+  reason: string;
+}
+
 interface ReviewRow {
   id: number;
   import_type: string;
@@ -14,6 +22,7 @@ interface ReviewRow {
   suggested_telegram_id: string | null;
   suggested_email: string | null;
   candidate_ids: number[] | null;
+  ai_suggestions: AiSuggestion[] | null;
   status: string;
   created_at: string;
 }
@@ -25,7 +34,7 @@ export async function GET(request: NextRequest) {
     const status = new URL(request.url).searchParams.get('status') ?? 'PENDING';
     const { rows } = await pool.query<ReviewRow>(
       `SELECT id, import_type, reason, suggested_name, suggested_username, suggested_telegram_id,
-              suggested_email, candidate_ids, status, created_at
+              suggested_email, candidate_ids, ai_suggestions, status, created_at
        FROM import_reviews WHERE status = $1 ORDER BY created_at DESC LIMIT 200`,
       [status]
     );

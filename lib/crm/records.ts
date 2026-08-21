@@ -233,3 +233,14 @@ export async function createContactCall(userId: number, input: CallInput) {
   });
   return call;
 }
+
+// ── Course progress (Teachable sync) ────────────────────────────────────────
+
+export async function listCourseProgress(userId: number) {
+  const { rows } = await pool.query(
+    `SELECT id, course_name, percent_complete, delta, joined_at, completed_at, last_synced_at
+     FROM course_progress WHERE user_id = $1 ORDER BY course_name`,
+    [userId]
+  );
+  return rows;
+}

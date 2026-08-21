@@ -9,6 +9,14 @@ interface Candidate {
   username: string | null;
 }
 
+interface AiSuggestion {
+  userId: number;
+  displayName: string | null;
+  username: string | null;
+  confidence: number;
+  reason: string;
+}
+
 interface ReviewRow {
   id: number;
   import_type: string;
@@ -18,6 +26,7 @@ interface ReviewRow {
   suggested_telegram_id: string | null;
   suggested_email: string | null;
   candidates: Candidate[];
+  ai_suggestions: AiSuggestion[] | null;
   created_at: string;
 }
 
@@ -183,6 +192,29 @@ export default function ReviewQueuePage() {
                   onClick={() => resolve(row.id, c.id)}
                 >
                   {c.display_name || c.username || `Member ${c.id}`} {c.username ? `(@${c.username})` : ''}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {row.ai_suggestions && row.ai_suggestions.length > 0 && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <p style={{ fontSize: '0.8125rem', color: '#8b98a5', marginBottom: '0.35rem' }}>AI-suggested matches — verify before picking:</p>
+              {row.ai_suggestions.map((s) => (
+                <button
+                  key={s.userId}
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ marginRight: '0.5rem', marginBottom: '0.35rem', display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: 320, whiteSpace: 'normal', textAlign: 'left' }}
+                  disabled={pendingIds.has(row.id)}
+                  onClick={() => resolve(row.id, s.userId)}
+                >
+                  <span>
+                    {s.displayName || s.username || `Member ${s.userId}`} {s.username ? `(@${s.username})` : ''}
+                    {' — '}
+                    <strong>{s.confidence}%</strong>
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: '#8b98a5', fontWeight: 400 }}>{s.reason}</span>
                 </button>
               ))}
             </div>

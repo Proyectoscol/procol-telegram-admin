@@ -51,12 +51,23 @@ interface TimelineEvent {
   source: string | null;
 }
 
+interface CourseProgress {
+  id: number;
+  course_name: string | null;
+  percent_complete: number | string | null;
+  delta: string | null;
+  joined_at: string | null;
+  completed_at: string | null;
+  last_synced_at: string | null;
+}
+
 interface CrmData {
   roadmap: Roadmap | null;
   wins: Win[];
   coachNotes: CoachNote[];
   followUps: FollowUp[];
   timeline: TimelineEvent[];
+  courseProgress: CourseProgress[];
 }
 
 const EVENT_ICON: Record<string, string> = {
@@ -439,6 +450,37 @@ export function MemberCrm({ userId }: { userId: number }) {
           ))}
         </ul>
         {data.followUps.length === 0 && !showFollowUpForm && <p style={{ color: '#8b98a5', marginTop: '1rem', fontSize: '0.875rem' }}>No follow-ups yet.</p>}
+      </div>
+
+      <div className="card">
+        <h2>Course progress</h2>
+        <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.75rem' }}>
+          Synced from Teachable (Import → Teachable course progress).
+        </p>
+        {data.courseProgress.length === 0 ? (
+          <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>No Teachable data yet.</p>
+        ) : (
+          <table style={{ fontSize: '0.875rem' }}>
+            <thead>
+              <tr>
+                <th>Course</th>
+                <th>Progress</th>
+                <th>Joined</th>
+                <th>Completed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.courseProgress.map((c) => (
+                <tr key={c.id}>
+                  <td>{c.course_name ?? '—'}</td>
+                  <td>{c.percent_complete != null ? `${c.percent_complete}%` : '—'}</td>
+                  <td>{fmtDate(c.joined_at)}</td>
+                  <td>{c.completed_at ? fmtDate(c.completed_at) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <div className="card">

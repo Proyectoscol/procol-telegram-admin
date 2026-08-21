@@ -8,11 +8,12 @@ import { pool } from '@/lib/db/client';
 import { recomputeOpportunities } from '@/lib/opportunities/engine';
 import { applyTypeRules, getImportType, type MemberRow } from '@/lib/import/listImport';
 import { applyQuestionnaireRow, type QuestionnaireRow } from '@/lib/import/questionnaireImport';
+import { applyTeachablePerson, type TeachablePerson } from '@/lib/import/teachableImport';
 
 interface ImportReviewRow {
   id: number;
   import_type: string;
-  raw_row: MemberRow | QuestionnaireRow;
+  raw_row: MemberRow | QuestionnaireRow | TeachablePerson;
   status: string;
 }
 
@@ -28,6 +29,8 @@ export async function resolveReviewRow(reviewId: number, userId: number): Promis
 
   if (review.import_type === 'QUESTIONNAIRE') {
     await applyQuestionnaireRow(userId, review.raw_row as QuestionnaireRow);
+  } else if (review.import_type === 'TEACHABLE') {
+    await applyTeachablePerson(userId, review.raw_row as TeachablePerson);
   } else if (getImportType(review.import_type)) {
     await applyTypeRules(userId, review.import_type, review.raw_row as MemberRow);
   } else {

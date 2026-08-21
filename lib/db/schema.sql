@@ -322,6 +322,12 @@ CREATE TABLE IF NOT EXISTS import_reviews (
 CREATE INDEX IF NOT EXISTS idx_import_reviews_status ON import_reviews(status);
 CREATE INDEX IF NOT EXISTS idx_import_reviews_type ON import_reviews(import_type);
 
+-- AI-ranked candidate suggestions (see lib/ai/memberMatch.ts) for rows the
+-- deterministic matcher couldn't resolve — a name/nickname mismatch the
+-- exact-match rules can't catch. Never auto-applied; an admin still picks
+-- from these (or searches) in the review queue.
+ALTER TABLE import_reviews ADD COLUMN IF NOT EXISTS ai_suggestions JSONB;
+
 CREATE TABLE IF NOT EXISTS wins (
   id SERIAL PRIMARY KEY,
   user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -446,6 +452,22 @@ CREATE TABLE IF NOT EXISTS course_progress (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Teachable's export is one row per (member, course) — a member enrolled in
+-- several courses has several rows. Widen the original single-row-per-user
+-- table to one row per course: drop the old user_id-only uniqueness, add the
+-- per-course fields the export carries (course name, joined/completed dates,
+-- delta), and key on (user_id, course_name) instead so re-uploading the same
+-- export updates existing rows instead of erroring or duplicating.
+ALTER TABLE course_progress ADD COLUMN IF NOT EXISTS course_name TEXT;
+ALTER TABLE course_progress ADD COLUMN IF NOT EXISTS teachable_email TEXT;
+ALTER TABLE course_progress ADD COLUMN IF NOT EXISTS teachable_name TEXT;
+ALTER TABLE course_progress ADD COLUMN IF NOT EXISTS joined_at DATE;
+ALTER TABLE course_progress ADD COLUMN IF NOT EXISTS delta TEXT;
+ALTER TABLE course_progress ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+ALTER TABLE course_progress DROP CONSTRAINT IF EXISTS course_progress_user_id_key;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_course_progress_user_course ON course_progress(user_id, course_name);
+CREATE INDEX IF NOT EXISTS idx_course_progress_user ON course_progress(user_id);
 
 -- ============================================================
 -- Lifetime is its own product, distinct from the Premium group. Premium

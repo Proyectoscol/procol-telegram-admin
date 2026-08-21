@@ -4,6 +4,7 @@
  * import. Username → Telegram ID → email → exact name, in that order.
  */
 import { pool } from '@/lib/db/client';
+import type { MatchSuggestion } from '@/lib/ai/memberMatch';
 
 export const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
@@ -59,6 +60,7 @@ export interface UserLite {
 }
 
 export interface MemberIndex {
+  all: UserLite[];
   byUsername: Map<string, UserLite>;
   byFromId: Map<string, UserLite>;
   byEmail: Map<string, UserLite>;
@@ -67,7 +69,7 @@ export interface MemberIndex {
 
 export async function buildMemberIndex(): Promise<MemberIndex> {
   const { rows } = await pool.query<UserLite>(`SELECT id, display_name, from_id, username, email FROM users`);
-  const idx: MemberIndex = { byUsername: new Map(), byFromId: new Map(), byEmail: new Map(), byName: new Map() };
+  const idx: MemberIndex = { all: rows, byUsername: new Map(), byFromId: new Map(), byEmail: new Map(), byName: new Map() };
   for (const u of rows) {
     if (u.username) idx.byUsername.set(u.username.toLowerCase(), u);
     if (u.from_id) idx.byFromId.set(u.from_id, u);
@@ -119,11 +121,12 @@ export async function createReviewRow(
   reason: ReviewReason,
   rawRow: unknown,
   identity: Identity,
-  candidates?: UserLite[]
+  candidates?: UserLite[],
+  aiSuggestions?: MatchSuggestion[]
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO import_reviews (batch_id, import_type, reason, raw_row, suggested_name, suggested_username, suggested_telegram_id, suggested_email, candidate_ids)
-     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9::jsonb)`,
+    `INSERT INTO import_reviews (batch_id, import_type, reason, raw_row, suggested_name, suggested_username, suggested_telegram_id, suggested_email, candidate_ids, ai_suggestions)
+     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9::jsonb, $10::jsonb)`,
     [
       batchId,
       importType,
@@ -134,6 +137,7 @@ export async function createReviewRow(
       identity.telegramId,
       identity.email,
       candidates ? JSON.stringify(candidates.map((c) => c.id)) : null,
+      aiSuggestions && aiSuggestions.length > 0 ? JSON.stringify(aiSuggestions) : null,
     ]
   );
 }

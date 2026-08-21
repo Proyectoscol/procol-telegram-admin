@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logger';
 import { ensureSchema } from '@/lib/db/client';
-import { listWins, listCoachNotes, listFollowUps, getRoadmap } from '@/lib/crm/records';
+import { listWins, listCoachNotes, listFollowUps, getRoadmap, listCourseProgress } from '@/lib/crm/records';
 import { getMemberTimeline } from '@/lib/timeline';
 
 export const runtime = 'nodejs';
@@ -22,15 +22,16 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (id == null) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
     await ensureSchema();
 
-    const [roadmap, wins, coachNotes, followUps, timeline] = await Promise.all([
+    const [roadmap, wins, coachNotes, followUps, timeline, courseProgress] = await Promise.all([
       getRoadmap(id),
       listWins(id),
       listCoachNotes(id),
       listFollowUps(id),
       getMemberTimeline(id),
+      listCourseProgress(id),
     ]);
 
-    return NextResponse.json({ roadmap, wins, coachNotes, followUps, timeline });
+    return NextResponse.json({ roadmap, wins, coachNotes, followUps, timeline, courseProgress });
   } catch (err) {
     log.error('members-crm', 'GET /api/members/[id]/crm failed', err);
     return NextResponse.json(

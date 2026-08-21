@@ -87,6 +87,67 @@ export default function ImportPage() {
     }
   };
 
+  const [teachableFile, setTeachableFile] = useState<File | null>(null);
+  const [teachablePreviewLoading, setTeachablePreviewLoading] = useState(false);
+  const [teachableApplyLoading, setTeachableApplyLoading] = useState(false);
+  const [teachablePreview, setTeachablePreview] = useState<{
+    counts: { total: number; update: number; review: number; skip: number };
+  } | null>(null);
+  const [teachableResult, setTeachableResult] = useState<{
+    totalPeople: number;
+    totalCourseRows: number;
+    updated: number;
+    unmatched: number;
+    skipped: number;
+    errors: string[];
+  } | null>(null);
+  const [teachableError, setTeachableError] = useState<string | null>(null);
+  const teachableInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTeachablePreview = async () => {
+    if (!teachableFile) {
+      setTeachableError('Please select a CSV file.');
+      return;
+    }
+    setTeachableError(null);
+    setTeachablePreview(null);
+    setTeachableResult(null);
+    setTeachablePreviewLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', teachableFile);
+      const res = await fetch('/api/import/teachable/preview', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Preview failed');
+      setTeachablePreview(data);
+    } catch (err) {
+      setTeachableError(err instanceof Error ? err.message : 'Preview failed');
+    } finally {
+      setTeachablePreviewLoading(false);
+    }
+  };
+
+  const handleTeachableApply = async () => {
+    if (!teachableFile) return;
+    setTeachableError(null);
+    setTeachableApplyLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', teachableFile);
+      const res = await fetch('/api/import/teachable', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      setTeachableResult(data);
+      setTeachablePreview(null);
+      setTeachableFile(null);
+      if (teachableInputRef.current) teachableInputRef.current.value = '';
+    } catch (err) {
+      setTeachableError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setTeachableApplyLoading(false);
+    }
+  };
+
   const IMPORT_LIST_TYPES = [
     { id: 'PAYMENT_PLAN', label: 'Payment plan list' },
     { id: 'LIFETIME', label: 'Lifetime member list' },
@@ -752,6 +813,79 @@ export default function ImportPage() {
           onClick={handleQuestionnaireApply}
         >
           {questionnaireApplyLoading ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Importing…
+            </span>
+          ) : (
+            'Apply import'
+          )}
+        </button>
+      </section>
+
+      <section className="card">
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Teachable course progress</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Upload the Teachable progress export (email, name, joined, course, percent_complete, delta,
+          completed_at — one row per course, so a member enrolled in several courses has several rows). Rows are
+          grouped by person before matching, matched by email first and then by an unambiguous exact name, and only
+          applied when the match is certain. Anyone that can&apos;t be matched with confidence goes to the{' '}
+          <a href="/review-queue">Review Queue</a> instead of being guessed — nothing is auto-assigned. There, AI-ranked
+          candidate suggestions (for name mismatches the exact-match rules can&apos;t catch) show up alongside the
+          usual search — still requires your click to confirm. Re-upload the same file any time to keep percent
+          complete and completion dates current.
+        </p>
+        <div className="upload-zone">
+          <label className="form-group">
+            <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select Teachable CSV</span>
+            <input
+              ref={teachableInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => { setTeachableFile(e.target.files?.[0] ?? null); setTeachablePreview(null); }}
+            />
+          </label>
+          <p>{teachableFile ? teachableFile.name : 'No file selected'}</p>
+        </div>
+        {teachableError && <div className="alert alert-error">{teachableError}</div>}
+
+        {teachablePreview && (
+          <div className="alert" style={{ background: 'rgba(29,155,240,0.12)', border: '1px solid #1d9bf0', color: '#e7e9ea', marginBottom: '1rem' }}>
+            {teachablePreview.counts.total} member(s) in this file: <strong>{teachablePreview.counts.update}</strong> will
+            update an existing member, <strong>{teachablePreview.counts.review}</strong> need review,{' '}
+            <strong>{teachablePreview.counts.skip}</strong> are empty and will be skipped.
+          </div>
+        )}
+
+        {teachableResult && (
+          <div className="alert alert-success">
+            Import complete. Updated: <strong>{teachableResult.updated}</strong> member(s) across{' '}
+            {teachableResult.totalCourseRows} course row(s), sent to review: <strong>{teachableResult.unmatched}</strong>,
+            skipped: {teachableResult.skipped}, total people: {teachableResult.totalPeople}.
+            {teachableResult.unmatched > 0 && (
+              <span> Resolve the unmatched rows in the <a href="/review-queue">Review Queue</a>.</span>
+            )}
+          </div>
+        )}
+
+        <button type="button" className="btn btn-secondary" disabled={!teachableFile || teachablePreviewLoading} onClick={handleTeachablePreview}>
+          {teachablePreviewLoading ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Previewing…
+            </span>
+          ) : (
+            'Preview'
+          )}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          style={{ marginLeft: '0.5rem' }}
+          disabled={!teachableFile || teachableApplyLoading}
+          onClick={handleTeachableApply}
+        >
+          {teachableApplyLoading ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
               <LoadingSpinner size="sm" />
               Importing…
