@@ -654,7 +654,7 @@ export function MemberCourseProgress({ userId }: { userId: number }) {
 
   return (
     <div className="card">
-      <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Course progress</h2>
+      <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Teachable</h2>
       <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.75rem' }}>
         Synced from Teachable (Import → Teachable course progress).
       </p>

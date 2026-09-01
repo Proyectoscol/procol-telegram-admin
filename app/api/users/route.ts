@@ -71,11 +71,6 @@ export async function GET(request: NextRequest) {
           WHERE from_id IS NOT NULL ${mChatFilter}
           GROUP BY from_id
         ),
-        call_counts AS (
-          SELECT user_id, COUNT(*)::int AS call_count, MAX(called_at) AS last_call
-          FROM contact_calls
-          GROUP BY user_id
-        ),
         msg_counts AS (
           SELECT from_id, COUNT(*)::int AS messages_sent
           FROM messages m
@@ -95,23 +90,24 @@ export async function GET(request: NextRequest) {
           WHERE m.from_id IS NOT NULL ${mChatFilter}
           GROUP BY m.from_id
         )
-        SELECT u.id, u.from_id, u.display_name, u.username, u.is_premium, u.assigned_to, u.notes,
+        SELECT u.id, u.from_id, u.display_name, u.username, u.is_premium,
                u.profile_photo_urls,
                COALESCE(u.is_current_member, FALSE) AS is_current_member,
                la.last_date AS last_activity,
-               COALESCE(cc.call_count, 0) AS call_count,
-               cc.last_call AS last_call_at,
                COALESCE(mc.messages_sent, 0) AS messages_sent,
                COALESCE(rr.reactions_received, 0) AS reactions_received,
                COALESCE(rg.reactions_given, 0) AS reactions_given,
-               (cp.user_id IS NOT NULL) AS has_persona
+               (cp.user_id IS NOT NULL) AS has_persona,
+               (cpi.user_id IS NOT NULL) AS has_custom_plan_intake,
+               (crs.user_id IS NOT NULL) AS has_course_progress
         FROM users u
         LEFT JOIN last_activity la ON la.from_id = u.from_id
-        LEFT JOIN call_counts cc ON cc.user_id = u.id
         LEFT JOIN msg_counts mc ON mc.from_id = u.from_id
         LEFT JOIN reactions_received rr ON rr.from_id = u.from_id
         LEFT JOIN reactions_given rg ON rg.from_id = u.from_id
         LEFT JOIN contact_personas cp ON cp.user_id = u.id
+        LEFT JOIN custom_plan_intake_responses cpi ON cpi.user_id = u.id
+        LEFT JOIN (SELECT DISTINCT user_id FROM course_progress) crs ON crs.user_id = u.id
         WHERE ${where}
         ORDER BY COALESCE(u.is_current_member, FALSE) DESC, la.last_date DESC NULLS LAST, u.display_name
       `;

@@ -660,7 +660,17 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         <a href="/contacts" className="btn btn-secondary" style={{ marginLeft: 'auto' }}>Back to contacts</a>
       </div>
 
-      <div className="card" style={{ marginBottom: '1rem' }}>
+      <div className="card" style={{ marginBottom: '1.5rem', position: 'relative' }}>
+        <div className="toggle-wrap" style={{ position: 'absolute', top: '0.85rem', right: '1rem' }} title={user.is_premium ? 'Premium members are always Lifetime' : undefined}>
+          <input
+            type="checkbox"
+            id="is_lifetime"
+            checked={user.is_lifetime}
+            onChange={(e) => handlePatch({ is_lifetime: e.target.checked })}
+            disabled={saving || user.is_premium}
+          />
+          <label htmlFor="is_lifetime" style={{ fontSize: '0.8125rem' }}>Lifetime</label>
+        </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', alignItems: 'flex-start' }}>
           {Array.isArray(user.profile_photo_urls) && user.profile_photo_urls.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', flexShrink: 0 }}>
@@ -713,7 +723,12 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
                 <div><code style={{ fontSize: '0.875rem' }}>{user.from_id ?? '—'}</code></div>
               </div>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem', marginBottom: user.telegram_bio ? '0.5rem' : 0 }}>
+            {user.member_since && (
+              <div style={{ marginTop: '0.75rem', fontSize: '0.8125rem', color: '#8b98a5' }}>
+                Joined {formatDate(user.member_since)}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem', marginBottom: user.telegram_bio ? '0.5rem' : 0 }}>
               {user.telegram_premium && (
                 <span className="badge" style={{ background: 'linear-gradient(135deg, #0088cc 0%, #00a2e8 100%)', color: '#fff' }}>Telegram Premium</span>
               )}
@@ -734,49 +749,6 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: '1.5rem', padding: '0.85rem 1rem' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem 1.5rem' }}>
-          <span style={{ fontSize: '0.8125rem' }}>
-            {user.is_current_member ? 'Current member' : 'Former member'}
-            {user.member_since && <span style={{ color: '#8b98a5' }}> · joined {formatDate(user.member_since)}</span>}
-          </span>
-          {user.offer_type && user.offer_type !== 'UNKNOWN' && (
-            <span style={{ fontSize: '0.8125rem', color: '#8b98a5' }}>{user.offer_type}</span>
-          )}
-          {user.payment_status && user.payment_status !== 'UNKNOWN' && (
-            <span style={{ fontSize: '0.8125rem', color: '#8b98a5' }}>
-              {user.payment_status}
-              {user.amount_paid != null ? ` · $${Number(user.amount_paid).toLocaleString()}` : ''}
-            </span>
-          )}
-          <div className="toggle-wrap" style={{ marginLeft: 'auto' }} title={user.is_premium ? 'Premium members are always Lifetime' : undefined}>
-            <input
-              type="checkbox"
-              id="is_lifetime"
-              checked={user.is_lifetime}
-              onChange={(e) => handlePatch({ is_lifetime: e.target.checked })}
-              disabled={saving || user.is_premium}
-            />
-            <label htmlFor="is_lifetime" style={{ fontSize: '0.8125rem' }}>Lifetime</label>
-          </div>
-          <input
-            type="text"
-            value={user.assigned_to ?? ''}
-            onChange={(e) => setUser((u) => (u ? { ...u, assigned_to: e.target.value || null } : null))}
-            onBlur={() => handlePatch({ assigned_to: user.assigned_to ?? '' })}
-            placeholder="Assigned to"
-            style={{ width: 140, fontSize: '0.8125rem', padding: '0.25rem 0.5rem' }}
-          />
-        </div>
-        <textarea
-          value={user.notes ?? ''}
-          onChange={(e) => setUser((u) => (u ? { ...u, notes: e.target.value || null } : null))}
-          onBlur={() => handlePatch({ notes: user.notes ?? '' })}
-          placeholder="Notes"
-          rows={2}
-          style={{ marginTop: '0.6rem', fontSize: '0.8125rem', minHeight: 'auto' }}
-        />
-      </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', margin: '1rem 0 1.5rem' }}>
         {(
           [
@@ -784,7 +756,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
             ['messages', 'Messages'],
             ['relationships', 'Relationships'],
             ['sales', 'Sales & Coaching'],
-            ['courses', 'Course Progress'],
+            ['courses', 'Teachable'],
           ] as const
         ).map(([key, label]) => (
           <button

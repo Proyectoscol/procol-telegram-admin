@@ -12,15 +12,13 @@ interface UserRow {
   username: string | null;
   is_premium: boolean;
   is_current_member: boolean;
-  assigned_to: string | null;
-  notes: string | null;
   last_activity: string | null;
-  call_count: number;
-  last_call_at: string | null;
   messages_sent: number;
   reactions_received: number;
   reactions_given: number;
   has_persona?: boolean;
+  has_custom_plan_intake?: boolean;
+  has_course_progress?: boolean;
   profile_photo_urls?: string[] | null;
 }
 
@@ -32,7 +30,7 @@ export default function ContactsPage() {
   const [selectedChatIds, setSelectedChatIds] = useState<number[]>([]);
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
   const [contactsSearch, setContactsSearch] = useState('');
-  type ContactsSortKey = 'display_name' | 'username' | 'from_id' | 'is_premium' | 'is_current_member' | 'assigned_to' | 'last_activity' | 'call_count' | 'last_call_at' | 'messages_sent' | 'reactions_received' | 'reactions_given' | 'has_persona';
+  type ContactsSortKey = 'display_name' | 'username' | 'from_id' | 'is_premium' | 'is_current_member' | 'last_activity' | 'messages_sent' | 'reactions_received' | 'reactions_given' | 'has_persona' | 'has_custom_plan_intake' | 'has_course_progress';
   const [contactsSortBy, setContactsSortBy] = useState<ContactsSortKey>('last_activity');
   const [contactsSortDir, setContactsSortDir] = useState<'asc' | 'desc'>('desc');
   const [contactsPage, setContactsPage] = useState(1);
@@ -86,13 +84,13 @@ export default function ContactsPage() {
     const key = contactsSortBy;
     let va: unknown = (a as unknown as Record<string, unknown>)[key];
     let vb: unknown = (b as unknown as Record<string, unknown>)[key];
-    if (key === 'last_activity' || key === 'last_call_at') {
+    if (key === 'last_activity') {
       va = va ? new Date(va as string).getTime() : 0;
       vb = vb ? new Date(vb as string).getTime() : 0;
-    } else if (key === 'is_premium' || key === 'has_persona' || key === 'is_current_member') {
+    } else if (key === 'is_premium' || key === 'has_persona' || key === 'is_current_member' || key === 'has_custom_plan_intake' || key === 'has_course_progress') {
       va = va ? 1 : 0;
       vb = vb ? 1 : 0;
-    } else if (key === 'display_name' || key === 'username' || key === 'from_id' || key === 'assigned_to') {
+    } else if (key === 'display_name' || key === 'username' || key === 'from_id') {
       const sa = String(va ?? '').toLowerCase();
       const sb = String(vb ?? '').toLowerCase();
       return contactsSortDir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa);
@@ -196,15 +194,13 @@ export default function ContactsPage() {
                   { key: 'is_premium' as const, label: 'Premium' },
                   { key: 'display_name' as const, label: 'Name' },
                   { key: 'username' as const, label: 'Username' },
-                  { key: 'from_id' as const, label: 'User ID' },
                   { key: 'messages_sent' as const, label: 'Messages' },
                   { key: 'reactions_received' as const, label: 'Reactions rec.' },
                   { key: 'reactions_given' as const, label: 'Reactions given' },
-                  { key: 'assigned_to' as const, label: 'Assigned to' },
                   { key: 'last_activity' as const, label: 'Last activity' },
-                  { key: 'call_count' as const, label: 'Calls' },
-                  { key: 'last_call_at' as const, label: 'Last call' },
-                  { key: 'has_persona' as const, label: 'Persona' },
+                  { key: 'has_persona' as const, label: 'AI Persona' },
+                  { key: 'has_custom_plan_intake' as const, label: 'Custom Plan Intake' },
+                  { key: 'has_course_progress' as const, label: 'Teachable' },
                 ] as { key: ContactsSortKey; label: string }[]).map(({ key, label }) => (
                   <th key={key} className="sortable-th">
                     <span className="sortable-th-label">{label}</span>
@@ -315,14 +311,10 @@ export default function ContactsPage() {
                       '—'
                     )}
                   </td>
-                  <td><code style={{ fontSize: '0.8rem' }}>{u.from_id ?? '—'}</code></td>
                   <td>{u.messages_sent ?? 0}</td>
                   <td>{u.reactions_received ?? 0}</td>
                   <td>{u.reactions_given ?? 0}</td>
-                  <td>{u.assigned_to || '—'}</td>
                   <td>{formatDate(u.last_activity)}</td>
-                  <td>{u.call_count}</td>
-                  <td>{formatDate(u.last_call_at)}</td>
                   <td>
                     {u.has_persona ? (
                       <a
@@ -336,6 +328,8 @@ export default function ContactsPage() {
                       '—'
                     )}
                   </td>
+                  <td>{u.has_custom_plan_intake ? 'Yes' : '—'}</td>
+                  <td>{u.has_course_progress ? 'Yes' : '—'}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <a href={profileHref(u)}>View profile</a>
                   </td>
