@@ -660,6 +660,123 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         <a href="/contacts" className="btn btn-secondary" style={{ marginLeft: 'auto' }}>Back to contacts</a>
       </div>
 
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', alignItems: 'flex-start' }}>
+          {Array.isArray(user.profile_photo_urls) && user.profile_photo_urls.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', flexShrink: 0 }}>
+              {user.profile_photo_urls.slice(0, 1).map((url, i) => (
+                <a
+                  key={i}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'block', borderRadius: 12, overflow: 'hidden', border: '1px solid #2f3336', lineHeight: 0 }}
+                  title="View full size"
+                >
+                  <img src={url} alt="" width={96} height={96} loading="lazy" decoding="async" style={{ width: 96, height: 96, objectFit: 'cover', display: 'block' }} />
+                </a>
+              ))}
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem 2rem' }}>
+              {user.username && (
+                <div>
+                  <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Username</span>
+                  <div style={{ fontWeight: 600 }}>
+                    <a href={`https://t.me/${user.username}`} target="_blank" rel="noopener noreferrer" title="Open in Telegram">
+                      @{user.username}
+                    </a>
+                  </div>
+                </div>
+              )}
+              {user.first_name != null && user.first_name !== '' && (
+                <div>
+                  <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>First name</span>
+                  <div>{user.first_name}</div>
+                </div>
+              )}
+              {user.last_name != null && user.last_name !== '' && (
+                <div>
+                  <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last name</span>
+                  <div>{user.last_name}</div>
+                </div>
+              )}
+              {user.phone && (
+                <div>
+                  <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone</span>
+                  <div>{user.phone}</div>
+                </div>
+              )}
+              <div>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>User ID</span>
+                <div><code style={{ fontSize: '0.875rem' }}>{user.from_id ?? '—'}</code></div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem', marginBottom: user.telegram_bio ? '0.5rem' : 0 }}>
+              {user.telegram_premium && (
+                <span className="badge" style={{ background: 'linear-gradient(135deg, #0088cc 0%, #00a2e8 100%)', color: '#fff' }}>Telegram Premium</span>
+              )}
+              {user.telegram_verified && <span className="badge" style={{ background: '#00ba7c', color: '#fff' }}>Verified</span>}
+              {user.telegram_fake && <span className="badge" style={{ background: '#f90', color: '#000' }}>Fake</span>}
+              {user.telegram_bot && <span className="badge" style={{ background: '#2f3336', color: '#8b98a5' }}>Bot</span>}
+              {user.telegram_status_type && (
+                <span className="badge badge-default">Status: {user.telegram_status_type}</span>
+              )}
+              {user.telegram_last_seen && (
+                <span style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>Last seen: {formatDate(user.telegram_last_seen)}</span>
+              )}
+            </div>
+            {user.telegram_bio && (
+              <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5, fontSize: '0.875rem', color: '#8b98a5' }}>{user.telegram_bio}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1.5rem', padding: '0.85rem 1rem' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem 1.5rem' }}>
+          <span style={{ fontSize: '0.8125rem' }}>
+            {user.is_current_member ? 'Current member' : 'Former member'}
+            {user.member_since && <span style={{ color: '#8b98a5' }}> · joined {formatDate(user.member_since)}</span>}
+          </span>
+          {user.offer_type && user.offer_type !== 'UNKNOWN' && (
+            <span style={{ fontSize: '0.8125rem', color: '#8b98a5' }}>{user.offer_type}</span>
+          )}
+          {user.payment_status && user.payment_status !== 'UNKNOWN' && (
+            <span style={{ fontSize: '0.8125rem', color: '#8b98a5' }}>
+              {user.payment_status}
+              {user.amount_paid != null ? ` · $${Number(user.amount_paid).toLocaleString()}` : ''}
+            </span>
+          )}
+          <div className="toggle-wrap" style={{ marginLeft: 'auto' }} title={user.is_premium ? 'Premium members are always Lifetime' : undefined}>
+            <input
+              type="checkbox"
+              id="is_lifetime"
+              checked={user.is_lifetime}
+              onChange={(e) => handlePatch({ is_lifetime: e.target.checked })}
+              disabled={saving || user.is_premium}
+            />
+            <label htmlFor="is_lifetime" style={{ fontSize: '0.8125rem' }}>Lifetime</label>
+          </div>
+          <input
+            type="text"
+            value={user.assigned_to ?? ''}
+            onChange={(e) => setUser((u) => (u ? { ...u, assigned_to: e.target.value || null } : null))}
+            onBlur={() => handlePatch({ assigned_to: user.assigned_to ?? '' })}
+            placeholder="Assigned to"
+            style={{ width: 140, fontSize: '0.8125rem', padding: '0.25rem 0.5rem' }}
+          />
+        </div>
+        <textarea
+          value={user.notes ?? ''}
+          onChange={(e) => setUser((u) => (u ? { ...u, notes: e.target.value || null } : null))}
+          onBlur={() => handlePatch({ notes: user.notes ?? '' })}
+          placeholder="Notes"
+          rows={2}
+          style={{ marginTop: '0.6rem', fontSize: '0.8125rem', minHeight: 'auto' }}
+        />
+      </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', margin: '1rem 0 1.5rem' }}>
         {(
           [
@@ -680,49 +797,6 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
           </button>
         ))}
       </div>
-
-      <div style={{ display: activeTab === 'profile' ? undefined : 'none' }}>
-      {Array.isArray(user.profile_photo_urls) && user.profile_photo_urls.length > 0 && (
-        <div className="profile-photos-gallery" style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '0.75rem' }}>
-            {user.profile_photo_urls.map((url, i) => (
-              <a
-                key={i}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'block',
-                  flexShrink: 0,
-                  borderRadius: 12,
-                  overflow: 'hidden',
-                  border: '1px solid #2f3336',
-                  lineHeight: 0,
-                }}
-                title="View full size"
-              >
-                <img
-                  src={url}
-                  alt=""
-                  width={i === 0 ? 120 : 72}
-                  height={i === 0 ? 120 : 72}
-                  loading="lazy"
-                  decoding="async"
-                  style={{
-                    width: i === 0 ? 120 : 72,
-                    height: i === 0 ? 120 : 72,
-                    objectFit: 'cover',
-                    display: 'block',
-                  }}
-                />
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
-
-      </div>
-
       <div style={{ display: (activeTab === 'messages' || activeTab === 'relationships') ? undefined : 'none' }}>
       {chats.length > 0 && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
@@ -776,147 +850,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       )}
 
       </div>
-
       <div style={{ display: activeTab === 'profile' ? undefined : 'none' }}>
-
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Membership &amp; status</h2>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem 2rem', marginBottom: '1rem' }}>
-          <div>
-            <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</span>
-            <div>{user.is_current_member ? 'Current member' : 'Former member'}</div>
-          </div>
-          {user.member_since && (
-            <div>
-              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Joined</span>
-              <div>{formatDate(user.member_since)}</div>
-            </div>
-          )}
-          {user.offer_type && user.offer_type !== 'UNKNOWN' && (
-            <div>
-              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Offer</span>
-              <div>{user.offer_type}</div>
-            </div>
-          )}
-          {user.payment_status && user.payment_status !== 'UNKNOWN' && (
-            <div>
-              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Payment</span>
-              <div>
-                {user.payment_status}
-                {user.amount_paid != null ? ` · $${Number(user.amount_paid).toLocaleString()}` : ''}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="form-group">
-          <div className="toggle-wrap">
-            <input
-              type="checkbox"
-              id="is_premium"
-              checked={user.is_premium}
-              onChange={(e) => handlePatch({ is_premium: e.target.checked })}
-              disabled={saving}
-            />
-            <label htmlFor="is_premium">In Premium</label>
-          </div>
-          <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: '0.35rem 0 0' }}>
-            Turning Premium on always turns Lifetime on too — Premium implies Lifetime, not the reverse.
-          </p>
-        </div>
-        <div className="form-group">
-          <div className="toggle-wrap">
-            <input
-              type="checkbox"
-              id="is_lifetime"
-              checked={user.is_lifetime}
-              onChange={(e) => handlePatch({ is_lifetime: e.target.checked })}
-              disabled={saving || user.is_premium}
-              title={user.is_premium ? 'Premium members are always Lifetime' : undefined}
-            />
-            <label htmlFor="is_lifetime">Lifetime</label>
-          </div>
-          {!user.is_premium && (
-            <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: '0.35rem 0 0' }}>
-              Can be on without Premium — Lifetime is its own product.
-            </p>
-          )}
-        </div>
-        <div className="form-group">
-          <label>Assigned to</label>
-          <input
-            type="text"
-            value={user.assigned_to ?? ''}
-            onChange={(e) => setUser((u) => (u ? { ...u, assigned_to: e.target.value || null } : null))}
-            onBlur={() => handlePatch({ assigned_to: user.assigned_to ?? '' })}
-            placeholder="Operator name"
-          />
-        </div>
-        <div className="form-group">
-          <label>Notes</label>
-          <textarea
-            value={user.notes ?? ''}
-            onChange={(e) => setUser((u) => (u ? { ...u, notes: e.target.value || null } : null))}
-            onBlur={() => handlePatch({ notes: user.notes ?? '' })}
-            placeholder="Free-form notes about this contact"
-          />
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Profile</h2>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem 2rem' }}>
-          {user.username && (
-            <div>
-              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Username</span>
-              <div style={{ fontWeight: 600 }}>@{user.username}</div>
-            </div>
-          )}
-          {user.first_name != null && user.first_name !== '' && (
-            <div>
-              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>First name</span>
-              <div>{user.first_name}</div>
-            </div>
-          )}
-          {user.last_name != null && user.last_name !== '' && (
-            <div>
-              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last name</span>
-              <div>{user.last_name}</div>
-            </div>
-          )}
-          {user.phone && (
-            <div>
-              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone</span>
-              <div>{user.phone}</div>
-            </div>
-          )}
-          <div>
-            <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>User ID</span>
-            <div><code style={{ fontSize: '0.875rem' }}>{user.from_id ?? '—'}</code></div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '1rem', marginBottom: user.telegram_bio ? '1rem' : 0 }}>
-          {user.telegram_premium && (
-            <span className="badge" style={{ background: 'linear-gradient(135deg, #0088cc 0%, #00a2e8 100%)', color: '#fff' }}>Telegram Premium</span>
-          )}
-          {user.telegram_verified && <span className="badge" style={{ background: '#00ba7c', color: '#fff' }}>Verified</span>}
-          {user.telegram_fake && <span className="badge" style={{ background: '#f90', color: '#000' }}>Fake</span>}
-          {user.telegram_bot && <span className="badge" style={{ background: '#2f3336', color: '#8b98a5' }}>Bot</span>}
-          {user.telegram_status_type && (
-            <span className="badge badge-default">Status: {user.telegram_status_type}</span>
-          )}
-          {user.telegram_last_seen && (
-            <span style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>
-              Last seen: {formatDate(user.telegram_last_seen)}
-            </span>
-          )}
-        </div>
-        {user.telegram_bio && (
-          <div style={{ marginTop: '0.75rem', paddingTop: '1rem', borderTop: '1px solid #2f3336' }}>
-            <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bio</span>
-            <p style={{ margin: '0.35rem 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>{user.telegram_bio}</p>
-          </div>
-        )}
-      </div>
 
       <CustomPlanIntakeSection userId={user.id} />
 
@@ -1849,4 +1783,5 @@ function UserMessagesList({ fromId, chatIds, initialMessages }: { fromId: string
     </ul>
   );
 }
+
 
