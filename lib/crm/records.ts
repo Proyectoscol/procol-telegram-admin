@@ -244,3 +244,16 @@ export async function listCourseProgress(userId: number) {
   );
   return rows;
 }
+
+// ── Custom Plan Intake (Google Form PDF import) ─────────────────────────────
+
+export async function getCustomPlanIntake(userId: number) {
+  const { rows } = await pool.query(
+    `SELECT primary_income_source, monthly_profit_usd, monthly_revenue_usd, profit_goal_6mo_usd,
+            niche, biggest_problem, has_sales_funnel, ran_paid_ads, team_structure, seriousness_level,
+            current_stage, skill_scores, raw_answers, submitted_at
+     FROM custom_plan_intake_responses WHERE user_id = $1`,
+    [userId]
+  );
+  return rows[0] ?? null;
+}

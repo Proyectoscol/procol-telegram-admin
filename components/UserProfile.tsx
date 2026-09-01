@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChatSelector } from '@/components/ChatSelector';
 import { LoadingCard, LoadingSpinner } from '@/components/Loading';
-import { MemberCrm } from '@/components/MemberCrm';
+import { CustomPlanIntakeSection, MemberActivityCrm, MemberCourseProgress } from '@/components/MemberCrm';
 
 interface UserProfileProps {
   fromId?: string;
@@ -34,6 +34,10 @@ interface UserDetail {
   assigned_to: string | null;
   notes: string | null;
   is_current_member?: boolean;
+  member_since?: string | null;
+  offer_type?: string | null;
+  payment_status?: string | null;
+  amount_paid?: number | string | null;
   profile_photo_urls?: string[] | null;
   stats: {
     messagesSent: number;
@@ -240,6 +244,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
   const [relationshipLoadingByKey, setRelationshipLoadingByKey] = useState<Record<string, boolean>>({});
   const [relationshipGeneratingByKey, setRelationshipGeneratingByKey] = useState<Record<string, boolean>>({});
   const [relationshipErrorByKey, setRelationshipErrorByKey] = useState<Record<string, string | null>>({});
+  const [activeTab, setActiveTab] = useState<'profile' | 'messages' | 'relationships' | 'sales' | 'courses'>('profile');
 
   const fromId = fromIdProp ?? (user?.from_id ?? null);
   const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
@@ -655,6 +660,28 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         <a href="/contacts" className="btn btn-secondary" style={{ marginLeft: 'auto' }}>Back to contacts</a>
       </div>
 
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', margin: '1rem 0 1.5rem' }}>
+        {(
+          [
+            ['profile', 'Profile'],
+            ['messages', 'Messages'],
+            ['relationships', 'Relationships'],
+            ['sales', 'Sales & Coaching'],
+            ['courses', 'Course Progress'],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={`btn ${activeTab === key ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: activeTab === 'profile' ? undefined : 'none' }}>
       {Array.isArray(user.profile_photo_urls) && user.profile_photo_urls.length > 0 && (
         <div className="profile-photos-gallery" style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '0.75rem' }}>
@@ -694,6 +721,9 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         </div>
       )}
 
+      </div>
+
+      <div style={{ display: (activeTab === 'messages' || activeTab === 'relationships') ? undefined : 'none' }}>
       {chats.length > 0 && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div className="filters" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.5rem' }}>
@@ -744,6 +774,93 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
           <p style={{ color: '#8b98a5', fontSize: '0.8125rem', margin: 0 }}>Applies to stats, charts, messages and reactions on this page.</p>
         </div>
       )}
+
+      </div>
+
+      <div style={{ display: activeTab === 'profile' ? undefined : 'none' }}>
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Membership &amp; status</h2>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem 2rem', marginBottom: '1rem' }}>
+          <div>
+            <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</span>
+            <div>{user.is_current_member ? 'Current member' : 'Former member'}</div>
+          </div>
+          {user.member_since && (
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Joined</span>
+              <div>{formatDate(user.member_since)}</div>
+            </div>
+          )}
+          {user.offer_type && user.offer_type !== 'UNKNOWN' && (
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Offer</span>
+              <div>{user.offer_type}</div>
+            </div>
+          )}
+          {user.payment_status && user.payment_status !== 'UNKNOWN' && (
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Payment</span>
+              <div>
+                {user.payment_status}
+                {user.amount_paid != null ? ` · $${Number(user.amount_paid).toLocaleString()}` : ''}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="form-group">
+          <div className="toggle-wrap">
+            <input
+              type="checkbox"
+              id="is_premium"
+              checked={user.is_premium}
+              onChange={(e) => handlePatch({ is_premium: e.target.checked })}
+              disabled={saving}
+            />
+            <label htmlFor="is_premium">In Premium</label>
+          </div>
+          <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: '0.35rem 0 0' }}>
+            Turning Premium on always turns Lifetime on too — Premium implies Lifetime, not the reverse.
+          </p>
+        </div>
+        <div className="form-group">
+          <div className="toggle-wrap">
+            <input
+              type="checkbox"
+              id="is_lifetime"
+              checked={user.is_lifetime}
+              onChange={(e) => handlePatch({ is_lifetime: e.target.checked })}
+              disabled={saving || user.is_premium}
+              title={user.is_premium ? 'Premium members are always Lifetime' : undefined}
+            />
+            <label htmlFor="is_lifetime">Lifetime</label>
+          </div>
+          {!user.is_premium && (
+            <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: '0.35rem 0 0' }}>
+              Can be on without Premium — Lifetime is its own product.
+            </p>
+          )}
+        </div>
+        <div className="form-group">
+          <label>Assigned to</label>
+          <input
+            type="text"
+            value={user.assigned_to ?? ''}
+            onChange={(e) => setUser((u) => (u ? { ...u, assigned_to: e.target.value || null } : null))}
+            onBlur={() => handlePatch({ assigned_to: user.assigned_to ?? '' })}
+            placeholder="Operator name"
+          />
+        </div>
+        <div className="form-group">
+          <label>Notes</label>
+          <textarea
+            value={user.notes ?? ''}
+            onChange={(e) => setUser((u) => (u ? { ...u, notes: e.target.value || null } : null))}
+            onBlur={() => handlePatch({ notes: user.notes ?? '' })}
+            placeholder="Free-form notes about this contact"
+          />
+        </div>
+      </div>
 
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Profile</h2>
@@ -800,6 +917,8 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
           </div>
         )}
       </div>
+
+      <CustomPlanIntakeSection userId={user.id} />
 
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>{personaLabels.title}</h2>
@@ -970,6 +1089,9 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         )}
       </div>
 
+      </div>
+
+      <div style={{ display: activeTab === 'relationships' ? undefined : 'none' }}>
       {fromId && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Top 3 relationships</h2>
@@ -1047,6 +1169,9 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         </div>
       )}
 
+      </div>
+
+      <div style={{ display: activeTab === 'messages' ? undefined : 'none' }}>
       <div className="stats-row">
         <div className="kpi-card">
           <div className="value">{user.stats.messagesSent.toLocaleString()}</div>
@@ -1103,6 +1228,9 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         </p>
       )}
 
+      </div>
+
+      <div style={{ display: activeTab === 'messages' ? undefined : 'none' }}>
       <div className="card">
         <h2>Messages over time (this user)</h2>
         <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
@@ -1192,6 +1320,9 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         )}
       </div>
 
+      </div>
+
+      <div style={{ display: activeTab === 'relationships' ? undefined : 'none' }}>
       <div className="card">
         <h2>Reactions over time (this user)</h2>
         <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
@@ -1281,62 +1412,9 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         )}
       </div>
 
-      <div className="card">
-        <h2>CRM &amp; follow-up</h2>
-        <div className="form-group">
-          <div className="toggle-wrap">
-            <input
-              type="checkbox"
-              id="is_premium"
-              checked={user.is_premium}
-              onChange={(e) => handlePatch({ is_premium: e.target.checked })}
-              disabled={saving}
-            />
-            <label htmlFor="is_premium">In Premium</label>
-          </div>
-          <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: '0.35rem 0 0' }}>
-            Turning Premium on always turns Lifetime on too — Premium implies Lifetime, not the reverse.
-          </p>
-        </div>
-        <div className="form-group">
-          <div className="toggle-wrap">
-            <input
-              type="checkbox"
-              id="is_lifetime"
-              checked={user.is_lifetime}
-              onChange={(e) => handlePatch({ is_lifetime: e.target.checked })}
-              disabled={saving || user.is_premium}
-              title={user.is_premium ? 'Premium members are always Lifetime' : undefined}
-            />
-            <label htmlFor="is_lifetime">Lifetime</label>
-          </div>
-          {!user.is_premium && (
-            <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: '0.35rem 0 0' }}>
-              Can be on without Premium — Lifetime is its own product.
-            </p>
-          )}
-        </div>
-        <div className="form-group">
-          <label>Assigned to</label>
-          <input
-            type="text"
-            value={user.assigned_to ?? ''}
-            onChange={(e) => setUser((u) => (u ? { ...u, assigned_to: e.target.value || null } : null))}
-            onBlur={() => handlePatch({ assigned_to: user.assigned_to ?? '' })}
-            placeholder="Operator name"
-          />
-        </div>
-        <div className="form-group">
-          <label>Notes</label>
-          <textarea
-            value={user.notes ?? ''}
-            onChange={(e) => setUser((u) => (u ? { ...u, notes: e.target.value || null } : null))}
-            onBlur={() => handlePatch({ notes: user.notes ?? '' })}
-            placeholder="Free-form notes about this contact"
-          />
-        </div>
       </div>
 
+      <div style={{ display: activeTab === 'sales' ? undefined : 'none' }}>
       <div className="card">
         <h2>Sales / coaching calls</h2>
         <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '1rem' }}>
@@ -1451,18 +1529,31 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         )}
       </div>
 
-      <MemberCrm userId={user.id} />
+      </div>
 
+      <div style={{ display: activeTab === 'profile' ? undefined : 'none' }}>
+      <MemberActivityCrm userId={user.id} />
+      </div>
+
+      <div style={{ display: activeTab === 'courses' ? undefined : 'none' }}>
+      <MemberCourseProgress userId={user.id} />
+      </div>
+
+      <div style={{ display: activeTab === 'relationships' ? undefined : 'none' }}>
       <div className="card">
         <h2>Reactions given (who they react to)</h2>
         {fromId ? <ReactionsGivenList fromId={fromId} chatIds={profileChatIds.length > 0 ? profileChatIds : undefined} initialData={profileChatIds.length === 0 ? _reactionsGiven : null} /> : <p style={{ color: '#8b98a5' }}>No Telegram ID yet (list-only contact). Stats and lists will appear after they interact and you re-import.</p>}
       </div>
 
+      </div>
+
+      <div style={{ display: activeTab === 'messages' ? undefined : 'none' }}>
       <div className="card">
         <h2>Recent messages</h2>
         {fromId ? <UserMessagesList fromId={fromId} chatIds={profileChatIds.length > 0 ? profileChatIds : undefined} initialMessages={profileChatIds.length === 0 ? _recentMsgs : null} /> : null}
       </div>
 
+      </div>
       {modalPoint && (
         <div className="modal-backdrop" onClick={() => setModalPoint(null)} role="presentation">
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
@@ -1758,3 +1849,4 @@ function UserMessagesList({ fromId, chatIds, initialMessages }: { fromId: string
     </ul>
   );
 }
+

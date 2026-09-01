@@ -61,6 +61,22 @@ interface CourseProgress {
   last_synced_at: string | null;
 }
 
+interface CustomPlanIntake {
+  primary_income_source: string | null;
+  monthly_profit_usd: number | string | null;
+  monthly_revenue_usd: number | string | null;
+  profit_goal_6mo_usd: number | string | null;
+  niche: string | null;
+  biggest_problem: string | null;
+  has_sales_funnel: boolean | null;
+  ran_paid_ads: boolean | null;
+  team_structure: string | null;
+  seriousness_level: number | null;
+  current_stage: string | null;
+  skill_scores: Record<string, number | null> | null;
+  submitted_at: string | null;
+}
+
 interface CrmData {
   roadmap: Roadmap | null;
   wins: Win[];
@@ -68,6 +84,7 @@ interface CrmData {
   followUps: FollowUp[];
   timeline: TimelineEvent[];
   courseProgress: CourseProgress[];
+  customPlanIntake: CustomPlanIntake | null;
 }
 
 const EVENT_ICON: Record<string, string> = {
@@ -84,11 +101,45 @@ const EVENT_ICON: Record<string, string> = {
   OTHER: '•',
 };
 
+const STAGE_LABELS: Record<string, string> = {
+  NO_AUDIENCE: 'No audience',
+  AUDIENCE_NO_MONETIZATION: 'Audience, no monetization',
+  LOW_SCALE: 'Monetizing, low scale',
+  SCALING_BOTTLENECK: 'Scaling bottleneck',
+};
+
+const TEAM_LABELS: Record<string, string> = {
+  ALONE: 'Works alone',
+  CONTRACTORS: 'Contractors/freelancers',
+  EMPLOYEES: 'Has employees/team',
+};
+
+const SKILL_LABELS: Record<string, string> = {
+  content_creation: 'Content creation',
+  copywriting: 'Copywriting',
+  sales: 'Sales',
+  offer_creation: 'Offer creation',
+  audience_growth: 'Audience growth',
+  branding: 'Branding',
+  marketing: 'Marketing',
+  systems_automation: 'Systems & automation',
+};
+
 function fmtDate(d: string | null): string {
   return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 }
 
-export function MemberCrm({ userId }: { userId: number }) {
+function fmtUsd(n: number | string | null): string {
+  if (n == null) return '—';
+  const num = Number(n);
+  return Number.isNaN(num) ? '—' : `$${num.toLocaleString()}`;
+}
+
+function fmtYesNo(b: boolean | null): string {
+  return b == null ? '—' : b ? 'Yes' : 'No';
+}
+
+function useCrmData(userId: number) {
   const [data, setData] = useState<CrmData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +160,122 @@ export function MemberCrm({ userId }: { userId: number }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  return { data, setData, loading, error, setError, load };
+}
+
+// ── Custom Plan Intake summary (read-only — imported, not hand-edited) ─────
+
+function CustomPlanIntakeCard({ intake }: { intake: CustomPlanIntake | null }) {
+  return (
+    <div className="card" style={{ marginBottom: '1.5rem' }}>
+      <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1rem' }}>Custom Plan Intake</h2>
+      {!intake ? (
+        <p style={{ color: '#8b98a5', fontSize: '0.875rem', margin: 0 }}>
+          No intake form on file yet — import via <a href="/import">Import → Custom Plan Intake Form</a>.
+        </p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem 2rem', marginBottom: '1rem' }}>
+            {intake.primary_income_source && (
+              <div>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Income source</span>
+                <div>{intake.primary_income_source}</div>
+              </div>
+            )}
+            {intake.current_stage && (
+              <div>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Business stage</span>
+                <div>{STAGE_LABELS[intake.current_stage] ?? intake.current_stage}</div>
+              </div>
+            )}
+            {intake.team_structure && (
+              <div>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Team</span>
+                <div>{TEAM_LABELS[intake.team_structure] ?? intake.team_structure}</div>
+              </div>
+            )}
+            {intake.seriousness_level != null && (
+              <div>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Seriousness</span>
+                <div>{intake.seriousness_level}/10</div>
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem 2rem', marginBottom: '1rem' }}>
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Monthly profit</span>
+              <div>{fmtUsd(intake.monthly_profit_usd)}</div>
+            </div>
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Monthly revenue</span>
+              <div>{fmtUsd(intake.monthly_revenue_usd)}</div>
+            </div>
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>6mo profit goal</span>
+              <div>{fmtUsd(intake.profit_goal_6mo_usd)}</div>
+            </div>
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sales funnel</span>
+              <div>{fmtYesNo(intake.has_sales_funnel)}</div>
+            </div>
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ran paid ads</span>
+              <div>{fmtYesNo(intake.ran_paid_ads)}</div>
+            </div>
+          </div>
+          {intake.niche && (
+            <div style={{ marginBottom: '1rem' }}>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Niche</span>
+              <p style={{ margin: '0.35rem 0 0' }}>{intake.niche}</p>
+            </div>
+          )}
+          {intake.biggest_problem && (
+            <div style={{ marginBottom: '1rem' }}>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Biggest problem</span>
+              <p style={{ margin: '0.35rem 0 0' }}>{intake.biggest_problem}</p>
+            </div>
+          )}
+          {intake.skill_scores && Object.values(intake.skill_scores).some((v) => v != null) && (
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Self-rated skills (1-10)</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
+                {Object.entries(intake.skill_scores)
+                  .filter(([, v]) => v != null)
+                  .map(([key, v]) => (
+                    <span key={key} className="badge badge-default">
+                      {SKILL_LABELS[key] ?? key}: {v}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+          {intake.submitted_at && (
+            <p style={{ color: '#8b98a5', fontSize: '0.75rem', marginTop: '1rem', marginBottom: 0 }}>
+              Submitted {fmtDate(intake.submitted_at)}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Custom Plan Intake, standalone (rendered above the buyer persona) ──────
+
+export function CustomPlanIntakeSection({ userId }: { userId: number }) {
+  const { data, loading, error } = useCrmData(userId);
+  if (loading && !data) return <LoadingCard message="Loading intake data…" />;
+  if (!data) return error ? <div className="alert alert-error">{error}</div> : null;
+  return <CustomPlanIntakeCard intake={data.customPlanIntake} />;
+}
+
+// ── Profile-tab CRM: roadmap, wins, coach notes, follow-ups, timeline ──────
+// (rendered below the buyer persona — see CustomPlanIntakeSection above for
+// the intake summary, which goes above the persona)
+
+export function MemberActivityCrm({ userId }: { userId: number }) {
+  const { data, setData, loading, error, setError, load } = useCrmData(userId);
 
   // ── Roadmap ──────────────────────────────────────────────────────────────
   const [roadmapForm, setRoadmapForm] = useState<Roadmap>({
@@ -264,8 +431,8 @@ export function MemberCrm({ userId }: { userId: number }) {
     <>
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div className="card">
-        <h2>Roadmap</h2>
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Roadmap</h2>
         <div className="form-group">
           <label>Stage</label>
           <select value={roadmapForm.stage ?? ''} onChange={(e) => setRoadmapForm((f) => ({ ...f, stage: e.target.value || null }))}>
@@ -304,8 +471,8 @@ export function MemberCrm({ userId }: { userId: number }) {
         </button>
       </div>
 
-      <div className="card">
-        <h2>Wins</h2>
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Wins</h2>
         {!showWinForm ? (
           <button type="button" className="btn" onClick={() => setShowWinForm(true)}>Log win</button>
         ) : (
@@ -351,8 +518,8 @@ export function MemberCrm({ userId }: { userId: number }) {
         {data.wins.length === 0 && !showWinForm && <p style={{ color: '#8b98a5', marginTop: '1rem', fontSize: '0.875rem' }}>No wins logged yet.</p>}
       </div>
 
-      <div className="card">
-        <h2>Coach notes</h2>
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Coach notes</h2>
         {!showNoteForm ? (
           <button type="button" className="btn" onClick={() => setShowNoteForm(true)}>Add note</button>
         ) : (
@@ -397,8 +564,8 @@ export function MemberCrm({ userId }: { userId: number }) {
         {data.coachNotes.length === 0 && !showNoteForm && <p style={{ color: '#8b98a5', marginTop: '1rem', fontSize: '0.875rem' }}>No coach notes yet.</p>}
       </div>
 
-      <div className="card">
-        <h2>Follow-ups</h2>
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Follow-ups</h2>
         {!showFollowUpForm ? (
           <button type="button" className="btn" onClick={() => setShowFollowUpForm(true)}>Schedule follow-up</button>
         ) : (
@@ -453,38 +620,7 @@ export function MemberCrm({ userId }: { userId: number }) {
       </div>
 
       <div className="card">
-        <h2>Course progress</h2>
-        <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.75rem' }}>
-          Synced from Teachable (Import → Teachable course progress).
-        </p>
-        {data.courseProgress.length === 0 ? (
-          <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>No Teachable data yet.</p>
-        ) : (
-          <table style={{ fontSize: '0.875rem' }}>
-            <thead>
-              <tr>
-                <th>Course</th>
-                <th>Progress</th>
-                <th>Joined</th>
-                <th>Completed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.courseProgress.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.course_name ?? '—'}</td>
-                  <td>{c.percent_complete != null ? `${c.percent_complete}%` : '—'}</td>
-                  <td>{fmtDate(c.joined_at)}</td>
-                  <td>{c.completed_at ? fmtDate(c.completed_at) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="card">
-        <h2>Timeline</h2>
+        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Timeline</h2>
         <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.75rem' }}>
           Every important event, chronological — automatically logged from the sections above.
         </p>
@@ -505,5 +641,47 @@ export function MemberCrm({ userId }: { userId: number }) {
         )}
       </div>
     </>
+  );
+}
+
+// ── Course-progress tab: just the Teachable sync table ─────────────────────
+
+export function MemberCourseProgress({ userId }: { userId: number }) {
+  const { data, loading, error } = useCrmData(userId);
+
+  if (loading && !data) return <LoadingCard message="Loading course progress…" />;
+  if (!data) return error ? <div className="alert alert-error">{error}</div> : null;
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Course progress</h2>
+      <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.75rem' }}>
+        Synced from Teachable (Import → Teachable course progress).
+      </p>
+      {data.courseProgress.length === 0 ? (
+        <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>No Teachable data yet.</p>
+      ) : (
+        <table style={{ fontSize: '0.875rem' }}>
+          <thead>
+            <tr>
+              <th>Course</th>
+              <th>Progress</th>
+              <th>Joined</th>
+              <th>Completed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.courseProgress.map((c) => (
+              <tr key={c.id}>
+                <td>{c.course_name ?? '—'}</td>
+                <td>{c.percent_complete != null ? `${c.percent_complete}%` : '—'}</td>
+                <td>{fmtDate(c.joined_at)}</td>
+                <td>{c.completed_at ? fmtDate(c.completed_at) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }

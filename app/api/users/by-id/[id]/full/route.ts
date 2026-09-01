@@ -33,7 +33,10 @@ export async function GET(
       `SELECT id, from_id, display_name, username, first_name, last_name, phone,
               is_premium, is_lifetime, telegram_premium, telegram_verified, telegram_fake, telegram_bot,
               telegram_status_type, telegram_bio, telegram_last_seen,
-              assigned_to, notes, created_at, updated_at, profile_photo_urls FROM users WHERE id = $1`,
+              assigned_to, notes, created_at, updated_at,
+              COALESCE(is_current_member, FALSE) AS is_current_member,
+              member_since, offer_type, payment_status, amount_paid,
+              profile_photo_urls FROM users WHERE id = $1`,
       [id]
     );
     const user = userRes.rows[0];
