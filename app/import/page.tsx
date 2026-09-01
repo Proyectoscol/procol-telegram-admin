@@ -148,6 +148,69 @@ export default function ImportPage() {
     }
   };
 
+  const [intakeFiles, setIntakeFiles] = useState<File[]>([]);
+  const [intakePreviewLoading, setIntakePreviewLoading] = useState(false);
+  const [intakeApplyLoading, setIntakeApplyLoading] = useState(false);
+  const [intakePreview, setIntakePreview] = useState<{
+    counts: { total: number; update: number; review: number; skip: number };
+    rows: { fileName: string; status: string; matchedUserName?: string; reason?: string; parseWarnings: string[]; parseError?: string }[];
+  } | null>(null);
+  const [intakeResult, setIntakeResult] = useState<{
+    totalFiles: number;
+    updated: number;
+    unmatched: number;
+    skipped: number;
+    errors: string[];
+    nameMismatches: string[];
+    parseWarnings: string[];
+  } | null>(null);
+  const [intakeError, setIntakeError] = useState<string | null>(null);
+  const intakeInputRef = useRef<HTMLInputElement>(null);
+
+  const handleIntakePreview = async () => {
+    if (intakeFiles.length === 0) {
+      setIntakeError('Please select one or more HTML exports.');
+      return;
+    }
+    setIntakeError(null);
+    setIntakePreview(null);
+    setIntakeResult(null);
+    setIntakePreviewLoading(true);
+    try {
+      const formData = new FormData();
+      intakeFiles.forEach((f) => formData.append('files', f));
+      const res = await fetch('/api/import/custom-plan-intake/preview', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Preview failed');
+      setIntakePreview(data);
+    } catch (err) {
+      setIntakeError(err instanceof Error ? err.message : 'Preview failed');
+    } finally {
+      setIntakePreviewLoading(false);
+    }
+  };
+
+  const handleIntakeApply = async () => {
+    if (intakeFiles.length === 0) return;
+    setIntakeError(null);
+    setIntakeApplyLoading(true);
+    try {
+      const formData = new FormData();
+      intakeFiles.forEach((f) => formData.append('files', f));
+      const res = await fetch('/api/import/custom-plan-intake', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      setIntakeResult(data);
+      setIntakePreview(null);
+      setIntakeFiles([]);
+      if (intakeInputRef.current) intakeInputRef.current.value = '';
+    } catch (err) {
+      setIntakeError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setIntakeApplyLoading(false);
+    }
+  };
+
   const IMPORT_LIST_TYPES = [
     { id: 'PAYMENT_PLAN', label: 'Payment plan list' },
     { id: 'LIFETIME', label: 'Lifetime member list' },
@@ -886,6 +949,122 @@ export default function ImportPage() {
           onClick={handleTeachableApply}
         >
           {teachableApplyLoading ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Importing…
+            </span>
+          ) : (
+            'Apply import'
+          )}
+        </button>
+      </section>
+
+      <section className="card">
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Custom Plan Intake Form</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Upload the &quot;NM Custom Plan Intake Form&quot; response(s), converted from the Google Forms PDF export to
+          HTML (plain PDF text loses which radio/checkbox option was selected — the HTML export keeps it). One file
+          is one respondent; select as many as you have to import them in a single batch. Matched by Telegram
+          username first (typo-tolerant — a small edit distance still counts as a match), falling back to email if
+          the username doesn&apos;t match confidently. Never auto-creates a member or overwrites an existing name —
+          unmatched or ambiguous rows go to the <a href="/review-queue">Review Queue</a>.
+        </p>
+        <div className="upload-zone">
+          <label className="form-group">
+            <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select HTML export(s)</span>
+            <input
+              ref={intakeInputRef}
+              type="file"
+              accept=".html,text/html"
+              multiple
+              onChange={(e) => { setIntakeFiles(Array.from(e.target.files ?? [])); setIntakePreview(null); }}
+            />
+          </label>
+          <p>{intakeFiles.length > 0 ? `${intakeFiles.length} file(s) selected` : 'No files selected'}</p>
+        </div>
+        {intakeError && <div className="alert alert-error">{intakeError}</div>}
+
+        {intakePreview && (
+          <div style={{ marginBottom: '1rem' }}>
+            <div className="alert" style={{ background: 'rgba(29,155,240,0.12)', border: '1px solid #1d9bf0', color: '#e7e9ea' }}>
+              {intakePreview.counts.total} file(s): <strong>{intakePreview.counts.update}</strong> will update an
+              existing member, <strong>{intakePreview.counts.review}</strong> need review,{' '}
+              <strong>{intakePreview.counts.skip}</strong> could not be parsed or matched to any identifier and will
+              be skipped.
+            </div>
+            <ul style={{ margin: '0.5rem 0 0', padding: 0, listStyle: 'none', fontSize: '0.8125rem' }}>
+              {intakePreview.rows.map((r) => (
+                <li key={r.fileName} style={{ marginBottom: '0.25rem', color: '#8b98a5' }}>
+                  <strong style={{ color: '#e7e9ea' }}>{r.fileName}</strong>: {r.status}
+                  {r.matchedUserName ? ` — ${r.matchedUserName}` : ''}
+                  {r.reason ? ` (${r.reason})` : ''}
+                  {r.parseError ? ` — parse error: ${r.parseError}` : ''}
+                  {r.parseWarnings.length > 0 && ` — ${r.parseWarnings.length} warning(s)`}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {intakeResult && (
+          <div className="alert alert-success">
+            Import complete. Updated: <strong>{intakeResult.updated}</strong>, sent to review:{' '}
+            <strong>{intakeResult.unmatched}</strong>, skipped: {intakeResult.skipped}, total files:{' '}
+            {intakeResult.totalFiles}.
+            {intakeResult.unmatched > 0 && (
+              <span> Resolve the unmatched rows in the <a href="/review-queue">Review Queue</a>.</span>
+            )}
+            {intakeResult.nameMismatches.length > 0 && (
+              <details style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
+                <summary>{intakeResult.nameMismatches.length} name mismatch(es) (existing name kept, not overwritten)</summary>
+                <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
+                  {intakeResult.nameMismatches.map((m, i) => (
+                    <li key={i} style={{ marginBottom: '0.25rem' }}>{m}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {intakeResult.parseWarnings.length > 0 && (
+              <details style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
+                <summary>{intakeResult.parseWarnings.length} parser warning(s)</summary>
+                <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
+                  {intakeResult.parseWarnings.map((w, i) => (
+                    <li key={i} style={{ marginBottom: '0.25rem' }}>{w}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {intakeResult.errors.length > 0 && (
+              <details style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
+                <summary>{intakeResult.errors.length} error(s)</summary>
+                <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
+                  {intakeResult.errors.map((e, i) => (
+                    <li key={i} style={{ marginBottom: '0.25rem' }}>{e}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+
+        <button type="button" className="btn btn-secondary" disabled={intakeFiles.length === 0 || intakePreviewLoading} onClick={handleIntakePreview}>
+          {intakePreviewLoading ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Previewing…
+            </span>
+          ) : (
+            'Preview'
+          )}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          style={{ marginLeft: '0.5rem' }}
+          disabled={intakeFiles.length === 0 || intakeApplyLoading}
+          onClick={handleIntakeApply}
+        >
+          {intakeApplyLoading ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
               <LoadingSpinner size="sm" />
               Importing…

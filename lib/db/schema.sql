@@ -537,3 +537,27 @@ CREATE TABLE IF NOT EXISTS telegram_scraper_groups (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_scraper_groups_role ON telegram_scraper_groups(role) WHERE role IS NOT NULL;
+
+-- Custom Plan Intake Form import (PDF->HTML export of a Google Form) —
+-- doesn't fit questionnaire_responses's fixed columns, so it gets its own
+-- table with the same raw_answers-JSONB-catch-all + promoted-columns pattern.
+CREATE TABLE IF NOT EXISTS custom_plan_intake_responses (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  primary_income_source TEXT,
+  monthly_profit_usd NUMERIC(12, 2),
+  monthly_revenue_usd NUMERIC(12, 2),
+  profit_goal_6mo_usd NUMERIC(12, 2),
+  niche TEXT,
+  biggest_problem TEXT,
+  has_sales_funnel BOOLEAN,
+  ran_paid_ads BOOLEAN,
+  team_structure TEXT,
+  seriousness_level SMALLINT,
+  current_stage TEXT,
+  skill_scores JSONB DEFAULT '{}'::jsonb,
+  raw_answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+  submitted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_custom_plan_intake_user ON custom_plan_intake_responses(user_id);

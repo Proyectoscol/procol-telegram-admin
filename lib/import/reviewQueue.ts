@@ -9,11 +9,13 @@ import { recomputeOpportunities } from '@/lib/opportunities/engine';
 import { applyTypeRules, getImportType, type MemberRow } from '@/lib/import/listImport';
 import { applyQuestionnaireRow, type QuestionnaireRow } from '@/lib/import/questionnaireImport';
 import { applyTeachablePerson, type TeachablePerson } from '@/lib/import/teachableImport';
+import { applyCustomPlanIntakePerson } from '@/lib/import/customPlanIntake';
+import type { CustomPlanIntakeParsed } from '@/lib/import/customPlanIntakeHtml';
 
 interface ImportReviewRow {
   id: number;
   import_type: string;
-  raw_row: MemberRow | QuestionnaireRow | TeachablePerson;
+  raw_row: MemberRow | QuestionnaireRow | TeachablePerson | CustomPlanIntakeParsed;
   status: string;
 }
 
@@ -31,6 +33,8 @@ export async function resolveReviewRow(reviewId: number, userId: number): Promis
     await applyQuestionnaireRow(userId, review.raw_row as QuestionnaireRow);
   } else if (review.import_type === 'TEACHABLE') {
     await applyTeachablePerson(userId, review.raw_row as TeachablePerson);
+  } else if (review.import_type === 'CUSTOM_PLAN_INTAKE') {
+    await applyCustomPlanIntakePerson(userId, review.raw_row as CustomPlanIntakeParsed);
   } else if (getImportType(review.import_type)) {
     await applyTypeRules(userId, review.import_type, review.raw_row as MemberRow);
   } else {

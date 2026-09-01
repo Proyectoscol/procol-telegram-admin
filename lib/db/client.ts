@@ -213,6 +213,7 @@ const EXPECTED_TABLES = [
   'member_events',
   'questionnaire_responses',
   'course_progress',
+  'custom_plan_intake_responses',
 ] as const;
 
 export async function validateSchema(): Promise<string[]> {

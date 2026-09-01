@@ -8,7 +8,7 @@ import type { MatchSuggestion } from '@/lib/ai/memberMatch';
 
 export const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
-export type ReviewReason = 'DUPLICATE_NAME' | 'UNMATCHED' | 'MISSING_IDENTIFIER';
+export type ReviewReason = 'DUPLICATE_NAME' | 'UNMATCHED' | 'MISSING_IDENTIFIER' | 'AMBIGUOUS_FUZZY_MATCH';
 
 export interface Identity {
   name: string | null;
@@ -112,6 +112,82 @@ export function matchIdentity(row: Identity, idx: MemberIndex): MatchResult {
   }
   const hasIdentifier = !!(row.username || row.telegramId || row.email);
   return { reason: hasIdentifier ? 'UNMATCHED' : 'MISSING_IDENTIFIER' };
+}
+
+// ── Fuzzy username matching (Custom Plan Intake import) ─────────────────────
+// A separate matcher from matchIdentity above — that one is exact-only and
+// stays that way for the existing list/questionnaire imports. This form's
+// Telegram username is hand-typed into a Google Form text field, so typos,
+// stray spaces, and a missing/extra "@" are common; username is also the
+// only identifier this form reliably has (no Telegram numeric ID), so it's
+// worth tolerating small edits before falling back to email.
+
+/** >= this normalized similarity is a confident auto-match. Roughly "one or two character edits away" for a typical username length. */
+export const FUZZY_USERNAME_MATCH_THRESHOLD = 0.9;
+/** >= this (but below the match threshold) is still worth surfacing as a review-queue candidate. */
+export const FUZZY_USERNAME_CANDIDATE_THRESHOLD = 0.6;
+
+export function normalizeUsernameLoose(raw: string | null | undefined): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim().toLowerCase().replace(/^@/, '').replace(/\s+/g, '');
+  return s.length > 0 ? s : null;
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const row = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row.push(Math.min(row[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost));
+    }
+    prev = row;
+  }
+  return prev[n];
+}
+
+/** 0-1 similarity, 1 = identical, after normalizing both sides. */
+export function usernameSimilarity(a: string, b: string): number {
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen === 0) return 1;
+  return 1 - levenshtein(a, b) / maxLen;
+}
+
+/**
+ * Fuzzy-username-first, email-fallback matcher for the Custom Plan Intake
+ * import. Never falls back to name matching (this form's "Full name" field
+ * is freeform prose in some responses, not a reliable match key).
+ */
+export function matchIdentityFuzzy(row: Identity, idx: MemberIndex): MatchResult {
+  const target = normalizeUsernameLoose(row.username);
+  let weakCandidates: UserLite[] = [];
+
+  if (target) {
+    const exact = idx.byUsername.get(target);
+    if (exact) return { user: exact, matchedBy: 'username' };
+
+    const scored = idx.all
+      .filter((u): u is UserLite & { username: string } => !!u.username)
+      .map((u) => ({ u, score: usernameSimilarity(target, u.username.toLowerCase()) }))
+      .filter((s) => s.score >= FUZZY_USERNAME_CANDIDATE_THRESHOLD)
+      .sort((a, b) => b.score - a.score);
+
+    const confident = scored.filter((s) => s.score >= FUZZY_USERNAME_MATCH_THRESHOLD);
+    if (confident.length === 1) return { user: confident[0].u, matchedBy: 'username' };
+    if (confident.length > 1) return { reason: 'AMBIGUOUS_FUZZY_MATCH', candidates: scored.map((s) => s.u) };
+    weakCandidates = scored.map((s) => s.u);
+  }
+
+  if (row.email && idx.byEmail.has(row.email.toLowerCase())) {
+    return { user: idx.byEmail.get(row.email.toLowerCase()), matchedBy: 'email' };
+  }
+
+  const hasIdentifier = !!(row.username || row.email);
+  return { reason: hasIdentifier ? 'UNMATCHED' : 'MISSING_IDENTIFIER', candidates: weakCandidates.length ? weakCandidates : undefined };
 }
 
 /** Insert an import_reviews row for a row that couldn't be confidently matched. */
