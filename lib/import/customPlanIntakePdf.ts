@@ -26,9 +26,25 @@
  *    "selected" fill color.
  */
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import * as pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs';
 import { assembleCustomPlanIntake, type CustomPlanIntakeParsed, type LeafDiv, type ScaleHit } from '@/lib/import/customPlanIntakeShared';
 
 export type { CustomPlanIntakeParsed, SkillScores, CustomPlanIntakeStructured } from '@/lib/import/customPlanIntakeShared';
+
+// pdf.js's Node "fake worker" path dynamically imports its worker module by
+// a bare-string path pdf.js resolves at runtime, using a webpack-ignored
+// import so bundlers won't trace it — which is exactly what Next.js's
+// serverless output tracing needs to include the file, so on Vercel that
+// import 404s ("Cannot find module '.../pdf.worker.mjs'"). pdf.js checks
+// `globalThis.pdfjsWorker.WorkerMessageHandler` before attempting that
+// import, so statically importing the worker module ourselves — which
+// Next's bundler *does* trace and include — and exposing it there skips the
+// broken lookup entirely.
+declare global {
+  // eslint-disable-next-line no-var
+  var pdfjsWorker: typeof import('pdfjs-dist/legacy/build/pdf.worker.mjs') | undefined;
+}
+globalThis.pdfjsWorker ??= pdfjsWorker;
 
 const OPS = pdfjsLib.OPS;
 
