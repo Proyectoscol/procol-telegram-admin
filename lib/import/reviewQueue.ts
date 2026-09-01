@@ -10,7 +10,7 @@ import { applyTypeRules, getImportType, type MemberRow } from '@/lib/import/list
 import { applyQuestionnaireRow, type QuestionnaireRow } from '@/lib/import/questionnaireImport';
 import { applyTeachablePerson, type TeachablePerson } from '@/lib/import/teachableImport';
 import { applyCustomPlanIntakePerson } from '@/lib/import/customPlanIntake';
-import type { CustomPlanIntakeParsed } from '@/lib/import/customPlanIntakeHtml';
+import type { CustomPlanIntakeParsed } from '@/lib/import/customPlanIntakeShared';
 
 interface ImportReviewRow {
   id: number;

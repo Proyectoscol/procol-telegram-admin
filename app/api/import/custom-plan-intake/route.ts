@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const fileEntries = formData.getAll('files').filter((f): f is File => f instanceof File);
     if (fileEntries.length === 0) return NextResponse.json({ error: 'No files provided' }, { status: 400 });
-    const files = await Promise.all(fileEntries.map(async (f) => ({ name: f.name, html: await f.text() })));
+    const files = await Promise.all(fileEntries.map(async (f) => ({ name: f.name, buffer: Buffer.from(await f.arrayBuffer()) })));
     const summary = await applyCustomPlanIntakeBatch(files);
     return NextResponse.json(summary);
   } catch (err) {

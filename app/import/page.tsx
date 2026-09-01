@@ -962,20 +962,20 @@ export default function ImportPage() {
       <section className="card">
         <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Custom Plan Intake Form</h2>
         <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
-          Upload the &quot;NM Custom Plan Intake Form&quot; response(s), converted from the Google Forms PDF export to
-          HTML (plain PDF text loses which radio/checkbox option was selected — the HTML export keeps it). One file
-          is one respondent; select as many as you have to import them in a single batch. Matched by Telegram
-          username first (typo-tolerant — a small edit distance still counts as a match), falling back to email if
-          the username doesn&apos;t match confidently. Never auto-creates a member or overwrites an existing name —
-          unmatched or ambiguous rows go to the <a href="/review-queue">Review Queue</a>.
+          Upload the &quot;NM Custom Plan Intake Form&quot; PDF response(s) exactly as downloaded from Google Forms —
+          no manual conversion needed, the app reads the PDF directly. One file is one respondent; select as many as
+          you have to import them in a single batch. Matched by Telegram username first (typo-tolerant — a small
+          edit distance still counts as a match), falling back to email if the username doesn&apos;t match
+          confidently. Never auto-creates a member or overwrites an existing name — unmatched or ambiguous rows go
+          to the <a href="/review-queue">Review Queue</a>.
         </p>
         <div className="upload-zone">
           <label className="form-group">
-            <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select HTML export(s)</span>
+            <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select PDF export(s)</span>
             <input
               ref={intakeInputRef}
               type="file"
-              accept=".html,text/html"
+              accept=".pdf,application/pdf"
               multiple
               onChange={(e) => { setIntakeFiles(Array.from(e.target.files ?? [])); setIntakePreview(null); }}
             />

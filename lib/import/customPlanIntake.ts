@@ -1,26 +1,44 @@
 /**
- * Custom Plan Intake Form import: applies parsed HTML exports (see
- * lib/import/customPlanIntakeHtml.ts) to matched members. Unlike the other
- * importers, matching here is fuzzy-username-first (this form's username
- * field is hand-typed into a Google Form, so typos/case/@ differences are
- * common) with an email fallback — see matchIdentityFuzzy in
+ * Custom Plan Intake Form import: applies a parsed response (see
+ * lib/import/customPlanIntakePdf.ts) to a matched member. Users upload the
+ * Google Forms PDF export directly — the app converts it server-side, so
+ * there's no manual PDF→HTML step. An HTML (pdf2htmlEX) export is still
+ * accepted as a fallback input, since lib/import/customPlanIntakeHtml.ts is
+ * kept around and shares the same underlying parsing logic.
+ *
+ * Unlike the other importers, matching here is fuzzy-username-first (this
+ * form's username field is hand-typed into a Google Form, so typos/case/@
+ * differences are common) with an email fallback — see matchIdentityFuzzy in
  * lib/import/matching.ts. Never auto-creates a member: no match at all, or
  * more than one confident fuzzy-username candidate, goes to the review
  * queue instead.
  *
- * One HTML export is one respondent, but the user uploads many at once (one
- * per Telegram contact) — applyCustomPlanIntakeBatch takes the whole batch,
- * logs a single import_batches row, and returns per-outcome counts.
+ * One file is one respondent, but the user uploads many at once (one per
+ * Telegram contact) — applyCustomPlanIntakeBatch takes the whole batch, logs
+ * a single import_batches row, and returns per-outcome counts.
  */
 import { pool } from '@/lib/db/client';
 import { logMemberEvent } from '@/lib/timeline';
 import { recomputeOpportunities } from '@/lib/opportunities/engine';
 import { buildMemberIndex, matchIdentityFuzzy, createReviewRow, type Identity, type ReviewReason, type UserLite } from '@/lib/import/matching';
-import { parseCustomPlanIntakeHtml, type CustomPlanIntakeParsed } from '@/lib/import/customPlanIntakeHtml';
+import { parseCustomPlanIntakePdf } from '@/lib/import/customPlanIntakePdf';
+import { parseCustomPlanIntakeHtml } from '@/lib/import/customPlanIntakeHtml';
+import { emptyCustomPlanIntakeParsed, type CustomPlanIntakeParsed } from '@/lib/import/customPlanIntakeShared';
 
 export interface CustomPlanIntakeFile {
   name: string;
-  html: string;
+  buffer: Buffer;
+}
+
+async function parseFile(file: CustomPlanIntakeFile): Promise<CustomPlanIntakeParsed> {
+  const lowerName = file.name.toLowerCase();
+  const looksLikePdf = lowerName.endsWith('.pdf') || file.buffer.subarray(0, 5).toString('latin1') === '%PDF-';
+  if (looksLikePdf) return parseCustomPlanIntakePdf(file.buffer);
+
+  const looksLikeHtml = lowerName.endsWith('.html') || lowerName.endsWith('.htm') || /^\s*<!doctype html|^\s*<html/i.test(file.buffer.subarray(0, 512).toString('utf-8'));
+  if (looksLikeHtml) return parseCustomPlanIntakeHtml(file.buffer.toString('utf-8'));
+
+  throw new Error('Unrecognized file type — expected a PDF export of the Custom Plan Intake Form (or an HTML export as a fallback).');
 }
 
 // ── Applying ─────────────────────────────────────────────────────────────
@@ -106,9 +124,9 @@ export interface CustomPlanIntakePreviewResult {
   counts: { total: number; update: number; review: number; skip: number };
 }
 
-function safeParse(file: CustomPlanIntakeFile): { parsed: CustomPlanIntakeParsed | null; error?: string } {
+async function safeParse(file: CustomPlanIntakeFile): Promise<{ parsed: CustomPlanIntakeParsed | null; error?: string }> {
   try {
-    return { parsed: parseCustomPlanIntakeHtml(file.html) };
+    return { parsed: await parseFile(file) };
   } catch (e) {
     return { parsed: null, error: (e as Error).message };
   }
@@ -119,9 +137,9 @@ export async function previewCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]
   const rows: CustomPlanIntakePreviewRow[] = [];
 
   for (const file of files) {
-    const { parsed, error } = safeParse(file);
+    const { parsed, error } = await safeParse(file);
     if (!parsed) {
-      rows.push({ fileName: file.name, input: emptyParsed(), status: 'skip', parseWarnings: [], parseError: error });
+      rows.push({ fileName: file.name, input: emptyCustomPlanIntakeParsed(), status: 'skip', parseWarnings: [], parseError: error });
       continue;
     }
     if (!parsed.username && !parsed.email) {
@@ -159,43 +177,6 @@ export async function previewCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]
   return { rows, counts };
 }
 
-function emptyParsed(): CustomPlanIntakeParsed {
-  return {
-    name: null,
-    username: null,
-    telegramId: null,
-    email: null,
-    fullName: null,
-    country: null,
-    qa: [],
-    rawAnswers: {},
-    warnings: [],
-    structured: {
-      primaryIncomeSource: null,
-      monthlyProfitUsd: null,
-      monthlyRevenueUsd: null,
-      profitGoal6moUsd: null,
-      niche: null,
-      biggestProblem: null,
-      hasSalesFunnel: null,
-      ranPaidAds: null,
-      teamStructure: null,
-      seriousnessLevel: null,
-      currentStage: null,
-      skillScores: {
-        content_creation: null,
-        copywriting: null,
-        sales: null,
-        offer_creation: null,
-        audience_growth: null,
-        branding: null,
-        marketing: null,
-        systems_automation: null,
-      },
-    },
-  };
-}
-
 export interface CustomPlanIntakeSummary {
   totalFiles: number;
   updated: number;
@@ -225,7 +206,7 @@ export async function applyCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]):
   const batchId = batchRes.rows[0].id;
 
   for (const file of files) {
-    const { parsed, error } = safeParse(file);
+    const { parsed, error } = await safeParse(file);
     if (!parsed) {
       skipped++;
       errors.push(`${file.name}: failed to parse (${error})`);
