@@ -10,7 +10,8 @@
 import { pool } from '@/lib/db/client';
 import { logMemberEvent } from '@/lib/timeline';
 import { recomputeOpportunities } from '@/lib/opportunities/engine';
-import { buildMemberIndex, matchIdentity, createReviewRow, isEmptyIdentity, type Identity, type ReviewReason } from '@/lib/import/matching';
+import { buildMemberIndex, matchIdentity, createReviewRow, isEmptyIdentity, splitTextEntries, type Identity, type ReviewReason } from '@/lib/import/matching';
+import { parseQuestionnaireText } from '@/lib/import/questionnaireAiText';
 
 // ── CSV parsing (quote-aware — form exports are real CSV, answers can contain commas) ──
 
@@ -220,4 +221,116 @@ export async function applyQuestionnaire(text: string, fileName: string): Promis
   if (touched.size) await recomputeOpportunities(Array.from(touched));
 
   return { total: rows.length, updated, unmatched, skipped, errors, batchId };
+}
+
+// ── Preview + apply (AI free-text, one entry per pasted welcome message) ──
+
+function emptyQuestionnaireRow(): QuestionnaireRow {
+  return { name: null, username: null, telegramId: null, email: null, ageRange: null, location: null, goals: null, business: null, whyJoined: null, rawAnswers: {} };
+}
+
+async function safeParseText(text: string): Promise<{ row: QuestionnaireRow | null; error?: string }> {
+  try {
+    return { row: await parseQuestionnaireText(text) };
+  } catch (e) {
+    return { row: null, error: (e as Error).message };
+  }
+}
+
+export interface QuestionnaireTextPreviewRow {
+  label: string;
+  input: QuestionnaireRow;
+  status: 'update' | 'review' | 'skip';
+  matchedUserName?: string;
+  reason?: ReviewReason;
+  candidateCount?: number;
+  parseError?: string;
+}
+
+export interface QuestionnaireTextPreviewResult {
+  rows: QuestionnaireTextPreviewRow[];
+  counts: { total: number; update: number; review: number; skip: number };
+}
+
+export async function previewQuestionnaireText(texts: string[]): Promise<QuestionnaireTextPreviewResult> {
+  const entries = texts.flatMap((t) => splitTextEntries(t));
+  const idx = await buildMemberIndex();
+  const rows: QuestionnaireTextPreviewRow[] = [];
+
+  for (let i = 0; i < entries.length; i++) {
+    const label = `Text ${i + 1}`;
+    const { row, error } = await safeParseText(entries[i]);
+    if (!row) {
+      rows.push({ label, input: emptyQuestionnaireRow(), status: 'skip', parseError: error });
+      continue;
+    }
+    if (isEmptyIdentity(row)) {
+      rows.push({ label, input: row, status: 'skip' });
+      continue;
+    }
+    const m = matchIdentity(row, idx);
+    if (m.user) rows.push({ label, input: row, status: 'update', matchedUserName: m.user.display_name ?? undefined });
+    else rows.push({ label, input: row, status: 'review', reason: m.reason, candidateCount: m.candidates?.length ?? 0 });
+  }
+
+  const counts = {
+    total: rows.length,
+    update: rows.filter((r) => r.status === 'update').length,
+    review: rows.filter((r) => r.status === 'review').length,
+    skip: rows.filter((r) => r.status === 'skip').length,
+  };
+  return { rows, counts };
+}
+
+export async function applyQuestionnaireTextBatch(texts: string[]): Promise<QuestionnaireSummary> {
+  const entries = texts.flatMap((t) => splitTextEntries(t));
+  const idx = await buildMemberIndex();
+
+  let updated = 0;
+  let unmatched = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+  const touched = new Set<number>();
+
+  const batchRes = await pool.query<{ id: number }>(
+    `INSERT INTO import_batches (kind, filename, total_rows) VALUES ('QUESTIONNAIRE_TEXT', $1, $2) RETURNING id`,
+    [entries.length === 1 ? 'pasted text' : `${entries.length} pasted entries`, entries.length]
+  );
+  const batchId = batchRes.rows[0].id;
+
+  for (let i = 0; i < entries.length; i++) {
+    const label = `Text ${i + 1}`;
+    const { row, error } = await safeParseText(entries[i]);
+    if (!row) {
+      skipped++;
+      errors.push(`${label}: failed to parse (${error})`);
+      continue;
+    }
+    if (isEmptyIdentity(row)) {
+      skipped++;
+      continue;
+    }
+    const m = matchIdentity(row, idx);
+    if (m.user) {
+      try {
+        await applyQuestionnaireRow(m.user.id, row);
+        touched.add(m.user.id);
+        updated++;
+      } catch (e) {
+        errors.push(`${label}: ${(e as Error).message}`);
+      }
+    } else {
+      unmatched++;
+      await createReviewRow(batchId, 'QUESTIONNAIRE', m.reason ?? 'UNMATCHED', row, row, m.candidates);
+    }
+  }
+
+  await pool.query(
+    `UPDATE import_batches SET members_updated = $2, unmatched = $3, skipped = $4, error_count = $5 WHERE id = $1`,
+    [batchId, updated, unmatched, skipped, errors.length]
+  );
+
+  if (touched.size) await recomputeOpportunities(Array.from(touched));
+
+  return { total: entries.length, updated, unmatched, skipped, errors, batchId };
 }

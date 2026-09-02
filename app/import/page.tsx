@@ -15,19 +15,9 @@ const ROSTER_EXPORT_COLUMNS: ExportColumn[] = [
 ];
 
 export default function ImportPage() {
-  const [userFile, setUserFile] = useState<File | null>(null);
-  const [userLoading, setUserLoading] = useState(false);
-  const [userResult, setUserResult] = useState<{
-    created: number;
-    updated: number;
-    total: number;
-    errors?: string[];
-    errorCount?: number;
-  } | null>(null);
-  const [userError, setUserError] = useState<string | null>(null);
-  const userInputRef = useRef<HTMLInputElement>(null);
-
+  const [questionnaireMode, setQuestionnaireMode] = useState<'file' | 'text'>('file');
   const [questionnaireFile, setQuestionnaireFile] = useState<File | null>(null);
+  const [questionnaireText, setQuestionnaireText] = useState('');
   const [questionnairePreviewLoading, setQuestionnairePreviewLoading] = useState(false);
   const [questionnaireApplyLoading, setQuestionnaireApplyLoading] = useState(false);
   const [questionnairePreview, setQuestionnairePreview] = useState<{
@@ -44,8 +34,12 @@ export default function ImportPage() {
   const questionnaireInputRef = useRef<HTMLInputElement>(null);
 
   const handleQuestionnairePreview = async () => {
-    if (!questionnaireFile) {
+    if (questionnaireMode === 'file' && !questionnaireFile) {
       setQuestionnaireError('Please select a CSV file.');
+      return;
+    }
+    if (questionnaireMode === 'text' && !questionnaireText.trim()) {
+      setQuestionnaireError('Paste a welcome message first.');
       return;
     }
     setQuestionnaireError(null);
@@ -53,9 +47,18 @@ export default function ImportPage() {
     setQuestionnaireResult(null);
     setQuestionnairePreviewLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', questionnaireFile);
-      const res = await fetch('/api/import/questionnaire/preview', { method: 'POST', body: formData });
+      let res: Response;
+      if (questionnaireMode === 'file') {
+        const formData = new FormData();
+        formData.append('file', questionnaireFile as File);
+        res = await fetch('/api/import/questionnaire/preview', { method: 'POST', body: formData });
+      } else {
+        res = await fetch('/api/import/questionnaire/text/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: questionnaireText }),
+        });
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Preview failed');
       setQuestionnairePreview(data);
@@ -67,18 +70,29 @@ export default function ImportPage() {
   };
 
   const handleQuestionnaireApply = async () => {
-    if (!questionnaireFile) return;
+    if (questionnaireMode === 'file' && !questionnaireFile) return;
+    if (questionnaireMode === 'text' && !questionnaireText.trim()) return;
     setQuestionnaireError(null);
     setQuestionnaireApplyLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', questionnaireFile);
-      const res = await fetch('/api/import/questionnaire', { method: 'POST', body: formData });
+      let res: Response;
+      if (questionnaireMode === 'file') {
+        const formData = new FormData();
+        formData.append('file', questionnaireFile as File);
+        res = await fetch('/api/import/questionnaire', { method: 'POST', body: formData });
+      } else {
+        res = await fetch('/api/import/questionnaire/text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: questionnaireText }),
+        });
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Import failed');
       setQuestionnaireResult(data);
       setQuestionnairePreview(null);
       setQuestionnaireFile(null);
+      setQuestionnaireText('');
       if (questionnaireInputRef.current) questionnaireInputRef.current.value = '';
     } catch (err) {
       setQuestionnaireError(err instanceof Error ? err.message : 'Import failed');
@@ -148,7 +162,9 @@ export default function ImportPage() {
     }
   };
 
+  const [intakeMode, setIntakeMode] = useState<'file' | 'text'>('file');
   const [intakeFiles, setIntakeFiles] = useState<File[]>([]);
+  const [intakeText, setIntakeText] = useState('');
   const [intakePreviewLoading, setIntakePreviewLoading] = useState(false);
   const [intakeApplyLoading, setIntakeApplyLoading] = useState(false);
   const [intakePreview, setIntakePreview] = useState<{
@@ -168,8 +184,12 @@ export default function ImportPage() {
   const intakeInputRef = useRef<HTMLInputElement>(null);
 
   const handleIntakePreview = async () => {
-    if (intakeFiles.length === 0) {
-      setIntakeError('Please select one or more HTML exports.');
+    if (intakeMode === 'file' && intakeFiles.length === 0) {
+      setIntakeError('Please select one or more PDF exports.');
+      return;
+    }
+    if (intakeMode === 'text' && !intakeText.trim()) {
+      setIntakeError('Paste the respondent’s answers first.');
       return;
     }
     setIntakeError(null);
@@ -177,9 +197,18 @@ export default function ImportPage() {
     setIntakeResult(null);
     setIntakePreviewLoading(true);
     try {
-      const formData = new FormData();
-      intakeFiles.forEach((f) => formData.append('files', f));
-      const res = await fetch('/api/import/custom-plan-intake/preview', { method: 'POST', body: formData });
+      let res: Response;
+      if (intakeMode === 'file') {
+        const formData = new FormData();
+        intakeFiles.forEach((f) => formData.append('files', f));
+        res = await fetch('/api/import/custom-plan-intake/preview', { method: 'POST', body: formData });
+      } else {
+        res = await fetch('/api/import/custom-plan-intake/text/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: intakeText }),
+        });
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Preview failed');
       setIntakePreview(data);
@@ -191,18 +220,29 @@ export default function ImportPage() {
   };
 
   const handleIntakeApply = async () => {
-    if (intakeFiles.length === 0) return;
+    if (intakeMode === 'file' && intakeFiles.length === 0) return;
+    if (intakeMode === 'text' && !intakeText.trim()) return;
     setIntakeError(null);
     setIntakeApplyLoading(true);
     try {
-      const formData = new FormData();
-      intakeFiles.forEach((f) => formData.append('files', f));
-      const res = await fetch('/api/import/custom-plan-intake', { method: 'POST', body: formData });
+      let res: Response;
+      if (intakeMode === 'file') {
+        const formData = new FormData();
+        intakeFiles.forEach((f) => formData.append('files', f));
+        res = await fetch('/api/import/custom-plan-intake', { method: 'POST', body: formData });
+      } else {
+        res = await fetch('/api/import/custom-plan-intake/text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: intakeText }),
+        });
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Import failed');
       setIntakeResult(data);
       setIntakePreview(null);
       setIntakeFiles([]);
+      setIntakeText('');
       if (intakeInputRef.current) intakeInputRef.current.value = '';
     } catch (err) {
       setIntakeError(err instanceof Error ? err.message : 'Import failed');
@@ -389,80 +429,11 @@ export default function ImportPage() {
     }
   };
 
-  const [photosZipFile, setPhotosZipFile] = useState<File | null>(null);
-  const [photosLoading, setPhotosLoading] = useState(false);
-  const [photosResult, setPhotosResult] = useState<{
-    created: number;
-    updated: number;
-    total: number;
-    photosUploaded: number;
-    errors?: string[];
-    errorCount?: number;
-  } | null>(null);
-  const [photosError, setPhotosError] = useState<string | null>(null);
-  const photosInputRef = useRef<HTMLInputElement>(null);
-
-  const handleUserSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userFile) {
-      setUserError('Please select a file.');
-      return;
-    }
-    setUserError(null);
-    setUserResult(null);
-    setUserLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', userFile);
-      const res = await fetch('/api/import/users-update', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
-      setUserResult(data);
-      setUserFile(null);
-      if (userInputRef.current) userInputRef.current.value = '';
-    } catch (err) {
-      setUserError(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setUserLoading(false);
-    }
-  };
-
-  const handlePhotosZipSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!photosZipFile) {
-      setPhotosError('Please select a ZIP file.');
-      return;
-    }
-    setPhotosError(null);
-    setPhotosResult(null);
-    setPhotosLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', photosZipFile);
-      const res = await fetch('/api/import/user-info-with-photos', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
-      setPhotosResult(data);
-      setPhotosZipFile(null);
-      if (photosInputRef.current) photosInputRef.current.value = '';
-    } catch (err) {
-      setPhotosError(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setPhotosLoading(false);
-    }
-  };
-
   return (
     <div>
       <h1>Import data</h1>
       <p style={{ color: '#8b98a5', marginBottom: '1.5rem', fontSize: '0.9375rem' }}>
-        <strong>Update members</strong>, <strong>Sync chats</strong>, and <strong>Sync profiles</strong> (automated Telegram sync), <strong>User info</strong> (profile data), and manual <strong>User info + profile photos</strong> (ZIP, fallback).
+        <strong>Update members</strong>, <strong>Sync chats</strong>, and <strong>Sync profiles</strong> (automated Telegram sync).
       </p>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
@@ -629,116 +600,6 @@ export default function ImportPage() {
         columns={ROSTER_EXPORT_COLUMNS}
       />
 
-      <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>User info + profile photos (ZIP)</h2>
-        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
-          Upload a <code style={{ background: '#2f3336', padding: '0.2rem 0.4rem', borderRadius: 4 }}>.zip</code> containing one folder of profile images (<code>profile_photos/</code>) and one or more JSON files (same structure as User info, with <code>profile_photos</code> paths). Each JSON can have ~90 users. Images are uploaded to Supabase Storage and URLs saved in the contact.
-        </p>
-        <form onSubmit={handlePhotosZipSubmit}>
-          <div className="upload-zone">
-            <label className="form-group">
-              <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select ZIP file</span>
-              <input
-                ref={photosInputRef}
-                type="file"
-                accept=".zip,application/zip"
-                onChange={(e) => setPhotosZipFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            <p>{photosZipFile ? photosZipFile.name : 'No file selected'}</p>
-          </div>
-          {photosError && <div className="alert alert-error">{photosError}</div>}
-          {photosResult && (
-            <>
-              <div className="alert alert-success">
-                User info + photos import complete. Created: <strong>{photosResult.created}</strong>, updated: <strong>{photosResult.updated}</strong>, total: <strong>{photosResult.total}</strong>, profile photos uploaded: <strong>{photosResult.photosUploaded}</strong>.
-              </div>
-              {photosResult.errorCount != null && photosResult.errorCount > 0 && (
-                <div className="alert" style={{ background: 'rgba(255, 165, 0, 0.15)', border: '1px solid #f90', color: '#f90' }}>
-                  {photosResult.errorCount} error(s).
-                  {photosResult.errors && photosResult.errors.length > 0 && (
-                    <details style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
-                      <summary>First errors</summary>
-                      <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
-                        {photosResult.errors.slice(0, 10).map((e, i) => (
-                          <li key={i} style={{ marginBottom: '0.25rem' }}>{e}</li>
-                        ))}
-                        {photosResult.errors.length > 10 && <li>… and {photosResult.errors.length - 10} more</li>}
-                      </ul>
-                    </details>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-          <button type="submit" className="btn" disabled={!photosZipFile || photosLoading}>
-            {photosLoading ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                <LoadingSpinner size="sm" />
-                Uploading…
-              </span>
-            ) : (
-              'Upload ZIP and import users + photos'
-            )}
-          </button>
-        </form>
-      </section>
-
-      <section className="card">
-        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>User info (update contacts)</h2>
-        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
-          Upload a JSON file with user profile data (e.g. from a user-list export). Each entry&apos;s <code style={{ background: '#2f3336', padding: '0.2rem 0.4rem', borderRadius: 4 }}>id</code> is matched to <code>from_id</code> as <code>user</code> + id (e.g. <code>5164610325</code> → <code>user5164610325</code>). Existing users are updated; new IDs create new contact rows.
-        </p>
-        <form onSubmit={handleUserSubmit}>
-          <div className="upload-zone">
-            <label className="form-group">
-              <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select user info JSON</span>
-              <input
-                ref={userInputRef}
-                type="file"
-                accept=".json,application/json"
-                onChange={(e) => setUserFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            <p>{userFile ? userFile.name : 'No file selected'}</p>
-          </div>
-          {userError && <div className="alert alert-error">{userError}</div>}
-          {userResult && (
-            <>
-              <div className="alert alert-success">
-                User info import complete. Created: {userResult.created}, updated: {userResult.updated}, total processed: {userResult.total}.
-              </div>
-              {userResult.errorCount != null && userResult.errorCount > 0 && (
-                <div className="alert" style={{ background: 'rgba(255, 165, 0, 0.15)', border: '1px solid #f90', color: '#f90' }}>
-                  {userResult.errorCount} row(s) had errors.
-                  {userResult.errors && userResult.errors.length > 0 && (
-                    <details style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
-                      <summary>First errors</summary>
-                      <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
-                        {userResult.errors.slice(0, 10).map((e, i) => (
-                          <li key={i} style={{ marginBottom: '0.25rem' }}>{e}</li>
-                        ))}
-                        {userResult.errors.length > 10 && <li>… and {userResult.errors.length - 10} more</li>}
-                      </ul>
-                    </details>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-          <button type="submit" className="btn" disabled={!userFile || userLoading}>
-            {userLoading ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                <LoadingSpinner size="sm" />
-                Uploading…
-              </span>
-            ) : (
-              'Upload and update users'
-            )}
-          </button>
-        </form>
-      </section>
-
       <section className="card">
         <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>CRM list import</h2>
         <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
@@ -820,23 +681,57 @@ export default function ImportPage() {
       <section className="card">
         <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Welcome questionnaire</h2>
         <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
-          Upload the questionnaire CSV export (one column per question). Columns are detected by header —
-          name/username/email/Telegram ID identify the member; age, location, goals, business, and &quot;why
-          joined&quot; are extracted automatically, and every column is kept regardless. Matched the same way as the
-          CRM list import; unmatched rows go to the <a href="/review-queue">Review Queue</a>.
+          Upload the questionnaire CSV export (one column per question), or paste a member&apos;s welcome
+          message/intro as plain text if that&apos;s the format you have it in — AI reads the message and fills in
+          whatever it can (age, location, goals, business, why they joined). Either way, be sure the text includes
+          the member&apos;s <strong>Telegram @handle or email</strong> somewhere so it can be matched to their
+          contact. Matched the same way as the CRM list import; unmatched entries go to the{' '}
+          <a href="/review-queue">Review Queue</a>.
         </p>
-        <div className="upload-zone">
-          <label className="form-group">
-            <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select questionnaire CSV</span>
-            <input
-              ref={questionnaireInputRef}
-              type="file"
-              accept=".csv,text/csv"
-              onChange={(e) => { setQuestionnaireFile(e.target.files?.[0] ?? null); setQuestionnairePreview(null); }}
-            />
-          </label>
-          <p>{questionnaireFile ? questionnaireFile.name : 'No file selected'}</p>
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+          <button
+            type="button"
+            className={questionnaireMode === 'file' ? 'btn' : 'btn btn-secondary'}
+            onClick={() => { setQuestionnaireMode('file'); setQuestionnairePreview(null); setQuestionnaireError(null); }}
+          >
+            Upload CSV
+          </button>
+          <button
+            type="button"
+            className={questionnaireMode === 'text' ? 'btn' : 'btn btn-secondary'}
+            onClick={() => { setQuestionnaireMode('text'); setQuestionnairePreview(null); setQuestionnaireError(null); }}
+          >
+            Paste text (AI)
+          </button>
         </div>
+
+        {questionnaireMode === 'file' ? (
+          <div className="upload-zone">
+            <label className="form-group">
+              <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select questionnaire CSV</span>
+              <input
+                ref={questionnaireInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => { setQuestionnaireFile(e.target.files?.[0] ?? null); setQuestionnairePreview(null); }}
+              />
+            </label>
+            <p>{questionnaireFile ? questionnaireFile.name : 'No file selected'}</p>
+          </div>
+        ) : (
+          <div className="form-group">
+            <label>Welcome message text</label>
+            <textarea
+              value={questionnaireText}
+              onChange={(e) => { setQuestionnaireText(e.target.value); setQuestionnairePreview(null); }}
+              placeholder={'Hey guys Im Chiel! Im from the Netherlands and I am a video editor for Tiktok and Instagram...\n\n@chielmeester'}
+              style={{ minHeight: 160, fontFamily: 'ui-monospace, monospace', fontSize: '0.8125rem' }}
+            />
+            <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginTop: '0.35rem' }}>
+              To import several people at once, separate each message with a line containing only <code>---</code>.
+            </p>
+          </div>
+        )}
         {questionnaireError && <div className="alert alert-error">{questionnaireError}</div>}
 
         {questionnairePreview && (
@@ -858,7 +753,12 @@ export default function ImportPage() {
           </div>
         )}
 
-        <button type="button" className="btn btn-secondary" disabled={!questionnaireFile || questionnairePreviewLoading} onClick={handleQuestionnairePreview}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={(questionnaireMode === 'file' ? !questionnaireFile : !questionnaireText.trim()) || questionnairePreviewLoading}
+          onClick={handleQuestionnairePreview}
+        >
           {questionnairePreviewLoading ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
               <LoadingSpinner size="sm" />
@@ -872,7 +772,7 @@ export default function ImportPage() {
           type="button"
           className="btn"
           style={{ marginLeft: '0.5rem' }}
-          disabled={!questionnaireFile || questionnaireApplyLoading}
+          disabled={(questionnaireMode === 'file' ? !questionnaireFile : !questionnaireText.trim()) || questionnaireApplyLoading}
           onClick={handleQuestionnaireApply}
         >
           {questionnaireApplyLoading ? (
@@ -964,24 +864,60 @@ export default function ImportPage() {
         <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
           Upload the &quot;NM Custom Plan Intake Form&quot; PDF response(s) exactly as downloaded from Google Forms —
           no manual conversion needed, the app reads the PDF directly. One file is one respondent; select as many as
-          you have to import them in a single batch. Matched by Telegram username first (typo-tolerant — a small
-          edit distance still counts as a match), falling back to email if the username doesn&apos;t match
-          confidently. Never auto-creates a member or overwrites an existing name — unmatched or ambiguous rows go
-          to the <a href="/review-queue">Review Queue</a>.
+          you have to import them in a single batch. Or, if you have the answers as plain text instead of a PDF
+          (e.g. someone DM&apos;d their answers), paste the text and AI extracts whichever fields the message
+          answers. Either way, be sure the text includes the respondent&apos;s{' '}
+          <strong>Telegram @handle or email</strong> so it can be matched to their contact. Matched by Telegram
+          username first (typo-tolerant — a small edit distance still counts as a match), falling back to email if
+          the username doesn&apos;t match confidently. Never auto-creates a member or overwrites an existing name —
+          unmatched or ambiguous rows go to the <a href="/review-queue">Review Queue</a>.
         </p>
-        <div className="upload-zone">
-          <label className="form-group">
-            <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select PDF export(s)</span>
-            <input
-              ref={intakeInputRef}
-              type="file"
-              accept=".pdf,application/pdf"
-              multiple
-              onChange={(e) => { setIntakeFiles(Array.from(e.target.files ?? [])); setIntakePreview(null); }}
-            />
-          </label>
-          <p>{intakeFiles.length > 0 ? `${intakeFiles.length} file(s) selected` : 'No files selected'}</p>
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+          <button
+            type="button"
+            className={intakeMode === 'file' ? 'btn' : 'btn btn-secondary'}
+            onClick={() => { setIntakeMode('file'); setIntakePreview(null); setIntakeError(null); }}
+          >
+            Upload PDF(s)
+          </button>
+          <button
+            type="button"
+            className={intakeMode === 'text' ? 'btn' : 'btn btn-secondary'}
+            onClick={() => { setIntakeMode('text'); setIntakePreview(null); setIntakeError(null); }}
+          >
+            Paste text (AI)
+          </button>
         </div>
+
+        {intakeMode === 'file' ? (
+          <div className="upload-zone">
+            <label className="form-group">
+              <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select PDF export(s)</span>
+              <input
+                ref={intakeInputRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                multiple
+                onChange={(e) => { setIntakeFiles(Array.from(e.target.files ?? [])); setIntakePreview(null); }}
+              />
+            </label>
+            <p>{intakeFiles.length > 0 ? `${intakeFiles.length} file(s) selected` : 'No files selected'}</p>
+          </div>
+        ) : (
+          <div className="form-group">
+            <label>Respondent&apos;s answers (text)</label>
+            <textarea
+              value={intakeText}
+              onChange={(e) => { setIntakeText(e.target.value); setIntakePreview(null); }}
+              placeholder={'Hey bro welcome! Please take a few minutes to answer the questions below...\n\n1. Email?\n2. Age and birthday?\n...\n\n@theirhandle'}
+              style={{ minHeight: 200, fontFamily: 'ui-monospace, monospace', fontSize: '0.8125rem' }}
+            />
+            <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginTop: '0.35rem' }}>
+              To import several respondents at once, separate each one&apos;s answers with a line containing only{' '}
+              <code>---</code>.
+            </p>
+          </div>
+        )}
         {intakeError && <div className="alert alert-error">{intakeError}</div>}
 
         {intakePreview && (
@@ -1047,7 +983,12 @@ export default function ImportPage() {
           </div>
         )}
 
-        <button type="button" className="btn btn-secondary" disabled={intakeFiles.length === 0 || intakePreviewLoading} onClick={handleIntakePreview}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={(intakeMode === 'file' ? intakeFiles.length === 0 : !intakeText.trim()) || intakePreviewLoading}
+          onClick={handleIntakePreview}
+        >
           {intakePreviewLoading ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
               <LoadingSpinner size="sm" />
@@ -1061,7 +1002,7 @@ export default function ImportPage() {
           type="button"
           className="btn"
           style={{ marginLeft: '0.5rem' }}
-          disabled={intakeFiles.length === 0 || intakeApplyLoading}
+          disabled={(intakeMode === 'file' ? intakeFiles.length === 0 : !intakeText.trim()) || intakeApplyLoading}
           onClick={handleIntakeApply}
         >
           {intakeApplyLoading ? (

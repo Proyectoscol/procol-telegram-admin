@@ -51,6 +51,14 @@ export function isEmptyIdentity(row: Identity): boolean {
   return !row.name && !row.username && !row.telegramId && !row.email;
 }
 
+/** Splits a pasted blob into individual entries on a standalone "---" separator line, so several people's welcome/intake messages can be pasted and imported in one batch (AI-text importers). */
+export function splitTextEntries(raw: string): string[] {
+  return raw
+    .split(/\r?\n[ \t]*-{3,}[ \t]*\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export interface UserLite {
   id: number;
   display_name: string | null;

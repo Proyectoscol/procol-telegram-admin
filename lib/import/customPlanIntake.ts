@@ -20,9 +20,10 @@
 import { pool } from '@/lib/db/client';
 import { logMemberEvent } from '@/lib/timeline';
 import { recomputeOpportunities } from '@/lib/opportunities/engine';
-import { buildMemberIndex, matchIdentityFuzzy, createReviewRow, type Identity, type ReviewReason, type UserLite } from '@/lib/import/matching';
+import { buildMemberIndex, matchIdentityFuzzy, createReviewRow, splitTextEntries, type Identity, type ReviewReason, type UserLite } from '@/lib/import/matching';
 import { parseCustomPlanIntakePdf } from '@/lib/import/customPlanIntakePdf';
 import { parseCustomPlanIntakeHtml } from '@/lib/import/customPlanIntakeHtml';
+import { parseCustomPlanIntakeText } from '@/lib/import/customPlanIntakeAiText';
 import { emptyCustomPlanIntakeParsed, type CustomPlanIntakeParsed } from '@/lib/import/customPlanIntakeShared';
 
 export interface CustomPlanIntakeFile {
@@ -39,6 +40,21 @@ async function parseFile(file: CustomPlanIntakeFile): Promise<CustomPlanIntakePa
   if (looksLikeHtml) return parseCustomPlanIntakeHtml(file.buffer.toString('utf-8'));
 
   throw new Error('Unrecognized file type — expected a PDF export of the Custom Plan Intake Form (or an HTML export as a fallback).');
+}
+
+/** A named thing that can be parsed into a CustomPlanIntakeParsed — either an uploaded file or a pasted-text entry (parsed via AI). Lets preview/apply share one code path regardless of source. */
+interface ParseSource {
+  name: string;
+  parse: () => Promise<CustomPlanIntakeParsed>;
+}
+
+function fileSources(files: CustomPlanIntakeFile[]): ParseSource[] {
+  return files.map((f) => ({ name: f.name, parse: () => parseFile(f) }));
+}
+
+function textSources(texts: string[]): ParseSource[] {
+  const entries = texts.flatMap((t) => splitTextEntries(t));
+  return entries.map((text, i) => ({ name: `Text ${i + 1}`, parse: () => parseCustomPlanIntakeText(text) }));
 }
 
 // ── Applying ─────────────────────────────────────────────────────────────
@@ -124,32 +140,32 @@ export interface CustomPlanIntakePreviewResult {
   counts: { total: number; update: number; review: number; skip: number };
 }
 
-async function safeParse(file: CustomPlanIntakeFile): Promise<{ parsed: CustomPlanIntakeParsed | null; error?: string }> {
+async function safeParseSource(src: ParseSource): Promise<{ parsed: CustomPlanIntakeParsed | null; error?: string }> {
   try {
-    return { parsed: await parseFile(file) };
+    return { parsed: await src.parse() };
   } catch (e) {
     return { parsed: null, error: (e as Error).message };
   }
 }
 
-export async function previewCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]): Promise<CustomPlanIntakePreviewResult> {
+async function previewCustomPlanIntakeSources(sources: ParseSource[]): Promise<CustomPlanIntakePreviewResult> {
   const idx = await buildMemberIndex();
   const rows: CustomPlanIntakePreviewRow[] = [];
 
-  for (const file of files) {
-    const { parsed, error } = await safeParse(file);
+  for (const src of sources) {
+    const { parsed, error } = await safeParseSource(src);
     if (!parsed) {
-      rows.push({ fileName: file.name, input: emptyCustomPlanIntakeParsed(), status: 'skip', parseWarnings: [], parseError: error });
+      rows.push({ fileName: src.name, input: emptyCustomPlanIntakeParsed(), status: 'skip', parseWarnings: [], parseError: error });
       continue;
     }
     if (!parsed.username && !parsed.email) {
-      rows.push({ fileName: file.name, input: parsed, status: 'skip', parseWarnings: parsed.warnings });
+      rows.push({ fileName: src.name, input: parsed, status: 'skip', parseWarnings: parsed.warnings });
       continue;
     }
     const m = matchIdentityFuzzy(parsed, idx);
     if (m.user) {
       rows.push({
-        fileName: file.name,
+        fileName: src.name,
         input: parsed,
         status: 'update',
         matchedBy: m.matchedBy as 'username' | 'email',
@@ -158,7 +174,7 @@ export async function previewCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]
       });
     } else {
       rows.push({
-        fileName: file.name,
+        fileName: src.name,
         input: parsed,
         status: 'review',
         reason: m.reason,
@@ -177,6 +193,14 @@ export async function previewCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]
   return { rows, counts };
 }
 
+export async function previewCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]): Promise<CustomPlanIntakePreviewResult> {
+  return previewCustomPlanIntakeSources(fileSources(files));
+}
+
+export async function previewCustomPlanIntakeTextBatch(texts: string[]): Promise<CustomPlanIntakePreviewResult> {
+  return previewCustomPlanIntakeSources(textSources(texts));
+}
+
 export interface CustomPlanIntakeSummary {
   totalFiles: number;
   updated: number;
@@ -188,7 +212,7 @@ export interface CustomPlanIntakeSummary {
   batchId: number;
 }
 
-export async function applyCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]): Promise<CustomPlanIntakeSummary> {
+async function applyCustomPlanIntakeSources(sources: ParseSource[], kind: string, filenameLabel: string): Promise<CustomPlanIntakeSummary> {
   const idx = await buildMemberIndex();
 
   let updated = 0;
@@ -200,19 +224,19 @@ export async function applyCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]):
   const touched = new Set<number>();
 
   const batchRes = await pool.query<{ id: number }>(
-    `INSERT INTO import_batches (kind, filename, total_rows) VALUES ('CUSTOM_PLAN_INTAKE', $1, $2) RETURNING id`,
-    [files.length === 1 ? files[0].name : `${files.length} files`, files.length]
+    `INSERT INTO import_batches (kind, filename, total_rows) VALUES ($1, $2, $3) RETURNING id`,
+    [kind, filenameLabel, sources.length]
   );
   const batchId = batchRes.rows[0].id;
 
-  for (const file of files) {
-    const { parsed, error } = await safeParse(file);
+  for (const src of sources) {
+    const { parsed, error } = await safeParseSource(src);
     if (!parsed) {
       skipped++;
-      errors.push(`${file.name}: failed to parse (${error})`);
+      errors.push(`${src.name}: failed to parse (${error})`);
       continue;
     }
-    if (parsed.warnings.length) parseWarnings.push(...parsed.warnings.map((w) => `${file.name}: ${w}`));
+    if (parsed.warnings.length) parseWarnings.push(...parsed.warnings.map((w) => `${src.name}: ${w}`));
 
     if (!parsed.username && !parsed.email) {
       skipped++;
@@ -227,7 +251,7 @@ export async function applyCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]):
         touched.add(m.user.id);
         updated++;
       } catch (e) {
-        errors.push(`${file.name}: ${(e as Error).message}`);
+        errors.push(`${src.name}: ${(e as Error).message}`);
       }
     } else {
       unmatched++;
@@ -243,5 +267,16 @@ export async function applyCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]):
 
   if (touched.size) await recomputeOpportunities(Array.from(touched));
 
-  return { totalFiles: files.length, updated, unmatched, skipped, errors, nameMismatches, parseWarnings, batchId };
+  return { totalFiles: sources.length, updated, unmatched, skipped, errors, nameMismatches, parseWarnings, batchId };
+}
+
+export async function applyCustomPlanIntakeBatch(files: CustomPlanIntakeFile[]): Promise<CustomPlanIntakeSummary> {
+  const label = files.length === 1 ? files[0].name : `${files.length} files`;
+  return applyCustomPlanIntakeSources(fileSources(files), 'CUSTOM_PLAN_INTAKE', label);
+}
+
+export async function applyCustomPlanIntakeTextBatch(texts: string[]): Promise<CustomPlanIntakeSummary> {
+  const sources = textSources(texts);
+  const label = sources.length === 1 ? sources[0].name : `${sources.length} pasted entries`;
+  return applyCustomPlanIntakeSources(sources, 'CUSTOM_PLAN_INTAKE_TEXT', label);
 }
