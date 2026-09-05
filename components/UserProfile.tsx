@@ -38,6 +38,10 @@ interface UserDetail {
   offer_type?: string | null;
   payment_status?: string | null;
   amount_paid?: number | string | null;
+  premium_since?: string | null;
+  lifetime_since?: string | null;
+  email?: string | null;
+  tags?: string[] | null;
   profile_photo_urls?: string[] | null;
   stats: {
     messagesSent: number;
@@ -244,7 +248,8 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
   const [relationshipLoadingByKey, setRelationshipLoadingByKey] = useState<Record<string, boolean>>({});
   const [relationshipGeneratingByKey, setRelationshipGeneratingByKey] = useState<Record<string, boolean>>({});
   const [relationshipErrorByKey, setRelationshipErrorByKey] = useState<Record<string, string | null>>({});
-  const [activeTab, setActiveTab] = useState<'profile' | 'messages' | 'relationships' | 'sales' | 'courses'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'payment' | 'messages' | 'relationships' | 'sales' | 'courses'>('profile');
+  const [tagsInput, setTagsInput] = useState('');
 
   const fromId = fromIdProp ?? (user?.from_id ?? null);
   const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
@@ -294,6 +299,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       })
       .then((data) => {
         setUser(data.user ?? null);
+        setTagsInput(Array.isArray(data.user?.tags) ? data.user.tags.join(', ') : '');
         setTimeSeries(data.timeSeries ?? null);
         if (Array.isArray(data.chats)) {
           setChats(data.chats);
@@ -497,7 +503,17 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
     }
   };
 
-  const handlePatch = async (updates: { is_premium?: boolean; is_lifetime?: boolean; assigned_to?: string; notes?: string }) => {
+  const handlePatch = async (updates: {
+    is_premium?: boolean;
+    is_lifetime?: boolean;
+    assigned_to?: string;
+    notes?: string;
+    offer_type?: string;
+    payment_status?: string;
+    amount_paid?: number | null;
+    email?: string;
+    tags?: string[];
+  }) => {
     if (!user) return;
     setSaving(true);
     try {
@@ -753,6 +769,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         {(
           [
             ['profile', 'Profile'],
+            ['payment', 'Payment & Status'],
             ['messages', 'Messages'],
             ['relationships', 'Relationships'],
             ['sales', 'Sales & Coaching'],
@@ -995,6 +1012,114 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         )}
       </div>
 
+      </div>
+
+      <div style={{ display: activeTab === 'payment' ? undefined : 'none' }}>
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <h2 style={{ marginTop: 0, marginBottom: '0.35rem', fontSize: '1rem' }}>Payment & member status</h2>
+          <p style={{ color: '#8b98a5', fontSize: '0.8125rem', margin: '0 0 1rem' }}>
+            Reflects what the CRM list imports (Payment Plan, Lifetime, Premium, Event Ticket, Email, General member
+            update) set for this member. Edit and save here directly for a one-off change, instead of running a
+            whole import for a single person.
+          </p>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+            <div className="form-group" style={{ margin: 0, minWidth: 180 }}>
+              <label style={{ fontSize: '0.75rem' }}>Offer type</label>
+              <input
+                type="text"
+                value={user.offer_type ?? ''}
+                onChange={(e) => setUser((u) => (u ? { ...u, offer_type: e.target.value } : null))}
+                onBlur={() => handlePatch({ offer_type: user.offer_type ?? '' })}
+                placeholder="e.g. PAYMENT_PLAN, LIFETIME, PREMIUM, EVENT_TICKET"
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0, minWidth: 180 }}>
+              <label style={{ fontSize: '0.75rem' }}>Payment status</label>
+              <input
+                type="text"
+                value={user.payment_status ?? ''}
+                onChange={(e) => setUser((u) => (u ? { ...u, payment_status: e.target.value } : null))}
+                onBlur={() => handlePatch({ payment_status: user.payment_status ?? '' })}
+                placeholder="e.g. PAID, PAYMENT_PLAN"
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0, minWidth: 140 }}>
+              <label style={{ fontSize: '0.75rem' }}>Amount paid</label>
+              <input
+                type="number"
+                value={user.amount_paid ?? ''}
+                onChange={(e) => setUser((u) => (u ? { ...u, amount_paid: e.target.value } : null))}
+                onBlur={() => handlePatch({ amount_paid: user.amount_paid === '' || user.amount_paid == null ? null : Number(user.amount_paid) })}
+                placeholder="0"
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0, minWidth: 220 }}>
+              <label style={{ fontSize: '0.75rem' }}>Email</label>
+              <input
+                type="email"
+                value={user.email ?? ''}
+                onChange={(e) => setUser((u) => (u ? { ...u, email: e.target.value } : null))}
+                onBlur={() => handlePatch({ email: user.email ?? '' })}
+                placeholder="member@example.com"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1rem' }}>
+            <div className="toggle-wrap" title="Premium always implies Lifetime">
+              <input
+                type="checkbox"
+                id="payment-is-premium"
+                checked={user.is_premium}
+                onChange={(e) => handlePatch({ is_premium: e.target.checked })}
+                disabled={saving}
+              />
+              <label htmlFor="payment-is-premium" style={{ fontSize: '0.8125rem' }}>
+                Premium{user.premium_since ? ` (since ${formatDate(user.premium_since)})` : ''}
+              </label>
+            </div>
+            <div className="toggle-wrap" title={user.is_premium ? 'Premium members are always Lifetime' : undefined}>
+              <input
+                type="checkbox"
+                id="payment-is-lifetime"
+                checked={user.is_lifetime}
+                onChange={(e) => handlePatch({ is_lifetime: e.target.checked })}
+                disabled={saving || user.is_premium}
+              />
+              <label htmlFor="payment-is-lifetime" style={{ fontSize: '0.8125rem' }}>
+                Lifetime{user.lifetime_since ? ` (since ${formatDate(user.lifetime_since)})` : ''}
+              </label>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label style={{ fontSize: '0.75rem' }}>Tags</label>
+            <input
+              type="text"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              onBlur={() => {
+                const parsed = tagsInput.split(',').map((t) => t.trim()).filter(Boolean);
+                setTagsInput(parsed.join(', '));
+                handlePatch({ tags: parsed });
+              }}
+              placeholder="Payment Plan, Lifetime, Premium, Event Ticket"
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label style={{ fontSize: '0.75rem' }}>Notes</label>
+            <textarea
+              value={user.notes ?? ''}
+              onChange={(e) => setUser((u) => (u ? { ...u, notes: e.target.value } : null))}
+              onBlur={() => handlePatch({ notes: user.notes ?? '' })}
+              placeholder="Notes from a General member update import, or anything else worth keeping on file"
+              rows={3}
+              style={{ fontSize: '0.8125rem' }}
+            />
+          </div>
+        </div>
       </div>
 
       <div style={{ display: activeTab === 'relationships' ? undefined : 'none' }}>

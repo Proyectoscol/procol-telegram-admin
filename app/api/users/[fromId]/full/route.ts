@@ -37,6 +37,7 @@ export async function GET(
               assigned_to, notes, created_at, updated_at,
               COALESCE(is_current_member, FALSE) AS is_current_member,
               member_since, offer_type, payment_status, amount_paid,
+              premium_since, lifetime_since, email, tags,
               profile_photo_urls FROM users WHERE from_id = $1`,
       [fromId]
     );
