@@ -17,6 +17,7 @@ import {
   splitLine,
   looksLikeId,
   normalizeUsername,
+  findUsernameToken,
   parseAmount,
   isEmptyIdentity,
   buildMemberIndex,
@@ -123,7 +124,7 @@ export function parseMemberRows(text: string): MemberRow[] {
     let email: string | null = at(cols?.email)?.trim().toLowerCase() ?? null;
     if (!email || !EMAIL_RE.test(email)) email = parts.find((p) => EMAIL_RE.test(p))?.toLowerCase() ?? null;
     let username = normalizeUsername(at(cols?.username));
-    if (!username) username = normalizeUsername(parts.find((p) => p.startsWith('@')));
+    if (!username) username = findUsernameToken(parts);
     let name: string | null = at(cols?.name)?.trim() || null;
     if (name && (looksLikeId(name) || EMAIL_RE.test(name) || normalizeUsername(name) === username)) name = null;
     if (!name) {

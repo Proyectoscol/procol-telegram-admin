@@ -39,6 +39,23 @@ export function normalizeUsername(raw: string | undefined): string | null {
   return /^[A-Za-z0-9_]{5,32}$/.test(s) ? s : null;
 }
 
+/**
+ * Finds an "@handle" embedded inside a field, not just a field that IS the
+ * handle — pasted list rows are often free text like
+ * "29. @itzmomen | 23 | momen | 12th August 1200/4000", where the username
+ * isn't its own column. Requires a preceding boundary (start of string or
+ * whitespace) so it doesn't grab the domain half of an email like
+ * "user@example.com".
+ */
+export function findUsernameToken(parts: string[]): string | null {
+  for (const p of parts) {
+    if (EMAIL_RE.test(p)) continue;
+    const m = p.match(/(?:^|\s)@(\w{5,32})\b/);
+    if (m) return normalizeUsername(`@${m[1]}`);
+  }
+  return null;
+}
+
 export function parseAmount(field: string | undefined): number | null {
   if (!field) return null;
   const s = field.replace(/[$,€£\s]/g, '');
@@ -118,7 +135,7 @@ export function matchIdentity(row: Identity, idx: MemberIndex): MatchResult {
     if (arr && arr.length === 1) return { user: arr[0], matchedBy: 'name' };
     if (arr && arr.length > 1) return { reason: 'DUPLICATE_NAME', candidates: arr };
   }
-  const hasIdentifier = !!(row.username || row.telegramId || row.email);
+  const hasIdentifier = !!(row.username || row.telegramId || row.email || row.name);
   return { reason: hasIdentifier ? 'UNMATCHED' : 'MISSING_IDENTIFIER' };
 }
 
