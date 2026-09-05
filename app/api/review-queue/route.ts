@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logger';
 import { ensureSchema, pool } from '@/lib/db/client';
 import { getImportType } from '@/lib/import/listImport';
-import { parsePaidTotalFraction, mentionsLifetimeAccess } from '@/lib/import/matching';
+import { parsePaidTotalFraction, parsePaymentDate, mentionsLifetimeAccess } from '@/lib/import/matching';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,7 +27,7 @@ interface ReviewRow {
   ai_suggestions: AiSuggestion[] | null;
   status: string;
   created_at: string;
-  raw_row: { name?: string | null; amount?: number | null; amountTotal?: number | null; lifetimeMentioned?: boolean } | null;
+  raw_row: { name?: string | null; amount?: number | null; amountTotal?: number | null; lifetimeMentioned?: boolean; paymentDate?: string | null } | null;
 }
 
 /** GET /api/review-queue?status=PENDING (default) — rows an admin needs to resolve. */
@@ -58,13 +58,14 @@ export async function GET(request: NextRequest) {
       // free-text lifetime mention that will be applied on resolve — surface what will
       // actually get saved. Falls back to re-parsing raw_row.name for rows queued
       // before this parsing existed, same as the resolve-time fallback in applyTypeRules.
-      let paymentHint: { amount: number | null; amountTotal: number | null; lifetime: boolean } | null = null;
+      let paymentHint: { amount: number | null; amountTotal: number | null; lifetime: boolean; recordedDate: string | null } | null = null;
       if (getImportType(r.import_type) && raw_row) {
         const fallbackFraction = raw_row.amount == null && raw_row.amountTotal == null ? parsePaidTotalFraction(raw_row.name) : null;
         const amount = raw_row.amount ?? fallbackFraction?.paid ?? null;
         const amountTotal = raw_row.amountTotal ?? fallbackFraction?.total ?? null;
         const lifetime = !!raw_row.lifetimeMentioned || mentionsLifetimeAccess(raw_row.name);
-        if (amount != null || amountTotal != null || lifetime) paymentHint = { amount, amountTotal, lifetime };
+        const recordedDate = raw_row.paymentDate ?? parsePaymentDate(raw_row.name);
+        if (amount != null || amountTotal != null || lifetime) paymentHint = { amount, amountTotal, lifetime, recordedDate };
       }
       return {
         ...rest,

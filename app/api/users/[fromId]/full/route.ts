@@ -63,7 +63,7 @@ export async function GET(
     const chatCondM = chatIds && chatIds.length > 0 ? ' AND m.chat_id = ANY($2::bigint[])' : '';
     const chatCondR = chatIds && chatIds.length > 0 ? ' AND r.chat_id = ANY($2::bigint[])' : '';
 
-    const [statsRes, topReactedRes, callsRes, recentMsgsRes, reactionsGivenRes] = await Promise.all([
+    const [statsRes, topReactedRes, callsRes, recentMsgsRes, reactionsGivenRes, paymentHistoryRes] = await Promise.all([
       queryWithRetry(
         `SELECT
           (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}${dateCondMsg}) AS messages_sent,
@@ -114,6 +114,12 @@ export async function GET(
          GROUP BY r.chat_id, c.name, c.slug, m.from_id, u.display_name
          ORDER BY r.chat_id, count DESC`,
         statsParams
+      ),
+      queryWithRetry(
+        `SELECT amount_paid, amount_total, recorded_date, import_type, raw_text, created_at
+         FROM payment_history WHERE user_id = $1
+         ORDER BY recorded_date DESC NULLS LAST, created_at DESC LIMIT 25`,
+        [user.id]
       ),
     ]);
 
@@ -186,6 +192,7 @@ export async function GET(
       labels,
       recentMessages,
       reactionsGiven,
+      paymentHistory: paymentHistoryRes.rows,
     });
   } catch (err) {
     const { log } = await import('@/lib/logger');

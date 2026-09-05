@@ -162,12 +162,20 @@ export async function GET(
       }));
     }
 
-    const callsRes = await queryWithRetry(
-      `SELECT id, call_number, called_at, notes, objections, plans_discussed, current_situation,
-              next_step, offer_discussed, likelihood, follow_up_date, created_by, created_at
-       FROM contact_calls WHERE user_id = $1 ORDER BY called_at DESC NULLS LAST, created_at DESC`,
-      [user.id]
-    );
+    const [callsRes, paymentHistoryRes] = await Promise.all([
+      queryWithRetry(
+        `SELECT id, call_number, called_at, notes, objections, plans_discussed, current_situation,
+                next_step, offer_discussed, likelihood, follow_up_date, created_by, created_at
+         FROM contact_calls WHERE user_id = $1 ORDER BY called_at DESC NULLS LAST, created_at DESC`,
+        [user.id]
+      ),
+      queryWithRetry(
+        `SELECT amount_paid, amount_total, recorded_date, import_type, raw_text, created_at
+         FROM payment_history WHERE user_id = $1
+         ORDER BY recorded_date DESC NULLS LAST, created_at DESC LIMIT 25`,
+        [user.id]
+      ),
+    ]);
 
     const [chats, labels] = await Promise.all([getChatsCached(), getLabelsCached()]);
 
@@ -178,6 +186,7 @@ export async function GET(
       labels,
       recentMessages,
       reactionsGiven,
+      paymentHistory: paymentHistoryRes.rows,
     });
   } catch (err) {
     const { log } = await import('@/lib/logger');

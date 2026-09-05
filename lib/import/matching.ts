@@ -82,6 +82,33 @@ export function parsePaidTotalFraction(text: string | null | undefined): { paid:
   return { paid, total };
 }
 
+const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+/**
+ * Extracts an ordinal-day + month-name date (e.g. "23rd February", "13th
+ * March") from a pasted row — this is when that payment/status snapshot was
+ * recorded, not the age (a bare number) or the item number prefix (an
+ * ordinal-day pattern never shows up for either of those). No year is ever
+ * given, so one is inferred: the current year, unless that lands in the
+ * future, in which case last year (handles a January import still logging a
+ * December date). Returns an ISO date string ("YYYY-MM-DD") or null.
+ */
+export function parsePaymentDate(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const m = text.match(/\b(\d{1,2})(?:st|nd|rd|th)\s+([A-Za-z]+)\b/);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = MONTH_NAMES.indexOf(m[2].toLowerCase());
+  if (month === -1 || day < 1 || day > 31) return null;
+  const now = new Date();
+  let year = now.getUTCFullYear();
+  const candidate = new Date(Date.UTC(year, month, day));
+  if (candidate.getTime() > now.getTime()) year -= 1;
+  const finalDate = new Date(Date.UTC(year, month, day));
+  if (finalDate.getUTCMonth() !== month) return null; // rolled over — invalid day for that month
+  return finalDate.toISOString().slice(0, 10);
+}
+
 /**
  * True when free text explicitly calls out lifetime access — e.g. a Payment
  * Plan row with " - LIFETIME ACCESS" appended — so it can grant Lifetime

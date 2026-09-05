@@ -20,6 +20,7 @@ import {
   findUsernameToken,
   parseAmount,
   parsePaidTotalFraction,
+  parsePaymentDate,
   mentionsLifetimeAccess,
   isEmptyIdentity,
   buildMemberIndex,
@@ -64,6 +65,8 @@ export interface MemberRow extends Identity {
   amountTotal: number | null;
   /** Row's free text explicitly called out lifetime access (e.g. "- LIFETIME ACCESS"), regardless of the import type it was filed under. */
   lifetimeMentioned: boolean;
+  /** Date (ISO) this payment/status snapshot was recorded as of, parsed from the row's free text (e.g. "23rd February"). Null when the row gave no date. */
+  paymentDate: string | null;
   notes: string | null;
 }
 
@@ -143,9 +146,10 @@ export function parseMemberRows(text: string): MemberRow[] {
     const amount = parseAmount(at(cols?.amount)) ?? fraction?.paid ?? (cols ? null : parts.map(parseAmount).find((a) => a != null) ?? null);
     const amountTotal = fraction?.total ?? null;
     const lifetimeMentioned = mentionsLifetimeAccess(lines[i]);
+    const paymentDate = parsePaymentDate(lines[i]);
     const notes = at(cols?.notes)?.trim() || null;
 
-    rows.push({ name, username, telegramId, email, amount, amountTotal, lifetimeMentioned, notes });
+    rows.push({ name, username, telegramId, email, amount, amountTotal, lifetimeMentioned, paymentDate, notes });
   }
   return rows;
 }
@@ -161,7 +165,7 @@ export const isEmptyRow = isEmptyIdentity;
  * positional heuristic to find free text; add a header row like
  * "name,notes" to capture it) can match a member but have nothing to apply.
  */
-export async function applyTypeRules(userId: number, typeId: string, row: MemberRow): Promise<boolean> {
+export async function applyTypeRules(userId: number, typeId: string, row: MemberRow, batchId: number | null = null): Promise<boolean> {
   const cfg = getImportType(typeId);
   if (!cfg) return false;
 
@@ -172,13 +176,15 @@ export async function applyTypeRules(userId: number, typeId: string, row: Member
     sets.push(`${col} = $${params.length}`);
   };
 
-  // Re-derive the paid/total fraction and any "LIFETIME ACCESS" mention from the
-  // row's raw text when they weren't already parsed onto the row — covers review
-  // rows queued before this parsing existed (raw_row is frozen at creation time,
-  // so a row resolved today from an old queue entry still needs this fallback).
+  // Re-derive the paid/total fraction, payment date, and any "LIFETIME ACCESS"
+  // mention from the row's raw text when they weren't already parsed onto the
+  // row — covers review rows queued before this parsing existed (raw_row is
+  // frozen at creation time, so a row resolved today from an old queue entry
+  // still needs this fallback).
   const fallbackFraction = row.amount == null && row.amountTotal == null ? parsePaidTotalFraction(row.name) : null;
   const amount = row.amount ?? fallbackFraction?.paid ?? null;
   const amountTotal = row.amountTotal ?? fallbackFraction?.total ?? null;
+  const paymentDate = row.paymentDate ?? parsePaymentDate(row.name);
   const lifetimeMentioned = row.lifetimeMentioned || mentionsLifetimeAccess(row.name);
 
   if (cfg.offerType) push('offer_type', cfg.offerType);
@@ -193,8 +199,24 @@ export async function applyTypeRules(userId: number, typeId: string, row: Member
     push('is_lifetime', true);
     sets.push(`lifetime_since = COALESCE(lifetime_since, NOW())`);
   }
-  if (amount != null) push('amount_paid', amount);
-  if (amountTotal != null) push('amount_total', amountTotal);
+  // A member gets re-imported many times as their plan progresses, so the
+  // "current" amount_paid/amount_total/payment_recorded_date only advance
+  // when this row's date is on or after what's already on file — an older or
+  // out-of-order re-import can't clobber a more recent figure. A row with no
+  // parseable date is treated as always-current (matches the simpler
+  // behavior most rows — the ones that never carry a date — always had).
+  if (amount != null || amountTotal != null) {
+    params.push(paymentDate);
+    const dateParam = params.length;
+    params.push(amount);
+    const amountParam = params.length;
+    params.push(amountTotal);
+    const totalParam = params.length;
+    const isCurrent = `($${dateParam}::date IS NULL OR payment_recorded_date IS NULL OR $${dateParam}::date >= payment_recorded_date)`;
+    sets.push(`amount_paid = CASE WHEN ${isCurrent} THEN COALESCE($${amountParam}, amount_paid) ELSE amount_paid END`);
+    sets.push(`amount_total = CASE WHEN ${isCurrent} THEN COALESCE($${totalParam}, amount_total) ELSE amount_total END`);
+    sets.push(`payment_recorded_date = CASE WHEN ${isCurrent} THEN COALESCE($${dateParam}::date, payment_recorded_date) ELSE payment_recorded_date END`);
+  }
   if (typeId === 'EMAIL' && row.email) push('email', row.email);
   if (typeId === 'MEMBER_UPDATE') {
     if (row.email) push('email', row.email);
@@ -211,6 +233,16 @@ export async function applyTypeRules(userId: number, typeId: string, row: Member
   if (sets.length === 0) return false;
   params.push(userId);
   await pool.query(`UPDATE users SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${params.length}`, params);
+
+  // Every observation lands here regardless of whether it advanced the
+  // member's "current" figures — this is the full history, not just the latest.
+  if (amount != null || amountTotal != null) {
+    await pool.query(
+      `INSERT INTO payment_history (user_id, amount_paid, amount_total, recorded_date, import_type, raw_text, batch_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, amount, amountTotal, paymentDate, typeId, row.name, batchId]
+    );
+  }
 
   await logMemberEvent(userId, 'IMPORT', `${cfg.label} import applied`, {
     description: row.notes ?? undefined,
@@ -273,7 +305,7 @@ export async function applyList(typeId: string, text: string, fileName: string):
     const m = matchIdentity(row, idx);
     if (m.user) {
       try {
-        const wrote = await applyTypeRules(m.user.id, typeId, row);
+        const wrote = await applyTypeRules(m.user.id, typeId, row, batchId);
         if (wrote) {
           touched.add(m.user.id);
           updated++;

@@ -83,6 +83,15 @@ interface TimeSeries {
   count: number;
 }
 
+interface PaymentHistoryEntry {
+  amount_paid: number | string | null;
+  amount_total: number | string | null;
+  recorded_date: string | null;
+  import_type: string | null;
+  raw_text: string | null;
+  created_at: string;
+}
+
 type QuickRange = '1w' | '1m' | '3m' | '6m' | '1y' | '2y' | 'all';
 const QUICK_RANGE_OPTIONS: { value: QuickRange; label: string }[] = [
   { value: '1w', label: 'Week' },
@@ -189,6 +198,7 @@ interface RelationshipInsight {
 
 export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserProfileProps) {
   const [user, setUser] = useState<UserDetail | null>(null);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'day' | 'week' | 'month'>('day');
@@ -311,6 +321,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         }
         if (Array.isArray(data.recentMessages)) _setRecentMsgs(data.recentMessages);
         if (Array.isArray(data.reactionsGiven)) _setReactionsGiven(data.reactionsGiven);
+        setPaymentHistory(Array.isArray(data.paymentHistory) ? data.paymentHistory : []);
       })
       .catch((e) => {
         if (e instanceof DOMException && e.name === 'AbortError') return;
@@ -1131,6 +1142,42 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
               style={{ fontSize: '0.8125rem' }}
             />
           </div>
+        </div>
+
+        <div className="card">
+          <h2 style={{ marginTop: 0, marginBottom: '0.35rem', fontSize: '1rem' }}>Payment history</h2>
+          <p style={{ color: '#8b98a5', fontSize: '0.8125rem', margin: '0 0 1rem' }}>
+            Every payment observation ever imported for this member — Amount paid/Plan total above reflect only the
+            most recently dated one, so an older re-import can&apos;t clobber a more recent figure.
+          </p>
+          {paymentHistory.length === 0 ? (
+            <p style={{ color: '#8b98a5', fontSize: '0.8125rem', margin: 0 }}>No payment history recorded yet.</p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: '#8b98a5' }}>
+                    <th style={{ padding: '0.35rem 0.5rem 0.35rem 0' }}>Date</th>
+                    <th style={{ padding: '0.35rem 0.5rem' }}>Paid</th>
+                    <th style={{ padding: '0.35rem 0.5rem' }}>Total</th>
+                    <th style={{ padding: '0.35rem 0.5rem' }}>Import type</th>
+                    <th style={{ padding: '0.35rem 0.5rem' }}>Source row</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentHistory.map((h, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid #2f3336' }}>
+                      <td style={{ padding: '0.35rem 0.5rem 0.35rem 0' }}>{h.recorded_date ? formatDate(h.recorded_date) : '—'}</td>
+                      <td style={{ padding: '0.35rem 0.5rem' }}>{h.amount_paid != null ? `$${Number(h.amount_paid).toLocaleString()}` : '—'}</td>
+                      <td style={{ padding: '0.35rem 0.5rem' }}>{h.amount_total != null ? `$${Number(h.amount_total).toLocaleString()}` : '—'}</td>
+                      <td style={{ padding: '0.35rem 0.5rem' }}>{h.import_type ?? '—'}</td>
+                      <td style={{ padding: '0.35rem 0.5rem', color: '#8b98a5', maxWidth: 320, whiteSpace: 'normal', wordBreak: 'break-word' }}>{h.raw_text ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 

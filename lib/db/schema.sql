@@ -288,6 +288,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12, 2);
 -- fraction in a pasted Payment Plan row) — distinct from amount_paid, which is how
 -- much of that total has actually come in so far.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS amount_total NUMERIC(12, 2);
+-- Date (parsed from the pasted row, e.g. "23rd February") that amount_paid/amount_total
+-- were last recorded as of. A member can be re-imported many times as their plan
+-- progresses; a row only overwrites the current amount_paid/amount_total when its own
+-- date is on or after this one, so an out-of-order or stale re-import can't clobber a
+-- more recent figure. Every observation still lands in payment_history regardless.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_recorded_date DATE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS status_override TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS left_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday DATE;
@@ -331,6 +337,24 @@ CREATE INDEX IF NOT EXISTS idx_import_reviews_type ON import_reviews(import_type
 -- exact-match rules can't catch. Never auto-applied; an admin still picks
 -- from these (or searches) in the review queue.
 ALTER TABLE import_reviews ADD COLUMN IF NOT EXISTS ai_suggestions JSONB;
+
+-- Every payment/amount observation a list import (or a manual Payment & Status
+-- edit) has ever recorded for a member — a full audit trail, since a member is
+-- often re-imported many times as their plan progresses. users.amount_paid/
+-- amount_total/payment_recorded_date hold only the current (most-recent-dated)
+-- snapshot; this table keeps everything that ever came in, in order.
+CREATE TABLE IF NOT EXISTS payment_history (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount_paid NUMERIC(12, 2),
+  amount_total NUMERIC(12, 2),
+  recorded_date DATE,
+  import_type TEXT,
+  raw_text TEXT,
+  batch_id INT REFERENCES import_batches(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_payment_history_user ON payment_history(user_id, recorded_date DESC NULLS LAST, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS wins (
   id SERIAL PRIMARY KEY,

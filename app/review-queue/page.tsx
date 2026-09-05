@@ -21,6 +21,7 @@ interface PaymentHint {
   amount: number | null;
   amountTotal: number | null;
   lifetime: boolean;
+  recordedDate: string | null;
 }
 
 interface ReviewRow {
@@ -189,6 +190,7 @@ export default function ReviewQueuePage() {
                 <strong>Detected payment:</strong>{' '}
                 {row.paymentHint.amount != null ? `$${row.paymentHint.amount.toLocaleString()}` : '—'}
                 {row.paymentHint.amountTotal != null ? ` of $${row.paymentHint.amountTotal.toLocaleString()} total` : ''}
+                {row.paymentHint.recordedDate ? ` as of ${row.paymentHint.recordedDate}` : ''}
               </div>
             )}
             {row.paymentHint?.lifetime && (

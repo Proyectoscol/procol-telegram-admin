@@ -17,12 +17,13 @@ interface ImportReviewRow {
   import_type: string;
   raw_row: MemberRow | QuestionnaireRow | TeachablePerson | CustomPlanIntakeParsed;
   status: string;
+  batch_id: number | null;
 }
 
 /** Apply a pending review row's data to a chosen existing member, then mark it resolved. */
 export async function resolveReviewRow(reviewId: number, userId: number): Promise<void> {
   const { rows } = await pool.query<ImportReviewRow>(
-    `SELECT id, import_type, raw_row, status FROM import_reviews WHERE id = $1`,
+    `SELECT id, import_type, raw_row, status, batch_id FROM import_reviews WHERE id = $1`,
     [reviewId]
   );
   const review = rows[0];
@@ -36,7 +37,7 @@ export async function resolveReviewRow(reviewId: number, userId: number): Promis
   } else if (review.import_type === 'CUSTOM_PLAN_INTAKE') {
     await applyCustomPlanIntakePerson(userId, review.raw_row as CustomPlanIntakeParsed);
   } else if (getImportType(review.import_type)) {
-    await applyTypeRules(userId, review.import_type, review.raw_row as MemberRow);
+    await applyTypeRules(userId, review.import_type, review.raw_row as MemberRow, review.batch_id);
   } else {
     throw new Error(`Unknown import type on review row: ${review.import_type}`);
   }
