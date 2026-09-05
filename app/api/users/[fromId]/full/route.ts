@@ -36,7 +36,7 @@ export async function GET(
               telegram_status_type, telegram_bio, telegram_last_seen,
               assigned_to, notes, created_at, updated_at,
               COALESCE(is_current_member, FALSE) AS is_current_member,
-              member_since, offer_type, payment_status, amount_paid,
+              member_since, offer_type, payment_status, amount_paid, amount_total,
               premium_since, lifetime_since, email, tags,
               profile_photo_urls FROM users WHERE from_id = $1`,
       [fromId]

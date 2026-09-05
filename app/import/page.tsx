@@ -544,12 +544,23 @@ export default function ImportPage() {
             ))}
           </select>
         </div>
+        {listType === 'PAYMENT_PLAN' && (
+          <p style={{ color: '#8b98a5', fontSize: '0.8125rem', margin: '-0.5rem 0 1rem' }}>
+            A free-text row like <code style={{ background: '#2f3336', padding: '0.1rem 0.35rem', borderRadius: 4 }}>29. @handle | age | Name | 12th August 2400/3000</code> works
+            too — the <code style={{ background: '#2f3336', padding: '0.1rem 0.35rem', borderRadius: 4 }}>paid/total</code> fraction
+            is read as amount paid vs. plan total, and a &quot;LIFETIME ACCESS&quot; mention anywhere in the row grants Lifetime.
+          </p>
+        )}
         <div className="form-group">
           <label>Rows</label>
           <textarea
             value={listText}
             onChange={(e) => { setListText(e.target.value); setListPreview(null); }}
-            placeholder={'Jane Doe, jane@example.com, 500\n@johnny, john@example.com'}
+            placeholder={
+              listType === 'PAYMENT_PLAN'
+                ? '29. @handle | 21 | Name | 12th August 2400/3000\n30. @otherhandle | 28 | Name | 21st August 1500/4000 - LIFETIME ACCESS'
+                : 'Jane Doe, jane@example.com, 500\n@johnny, john@example.com'
+            }
             style={{ minHeight: 160, fontFamily: 'ui-monospace, monospace', fontSize: '0.8125rem' }}
           />
         </div>

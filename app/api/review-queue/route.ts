@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logger';
 import { ensureSchema, pool } from '@/lib/db/client';
+import { getImportType } from '@/lib/import/listImport';
+import { parsePaidTotalFraction, mentionsLifetimeAccess } from '@/lib/import/matching';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,6 +27,7 @@ interface ReviewRow {
   ai_suggestions: AiSuggestion[] | null;
   status: string;
   created_at: string;
+  raw_row: { name?: string | null; amount?: number | null; amountTotal?: number | null; lifetimeMentioned?: boolean } | null;
 }
 
 /** GET /api/review-queue?status=PENDING (default) — rows an admin needs to resolve. */
@@ -34,7 +37,7 @@ export async function GET(request: NextRequest) {
     const status = new URL(request.url).searchParams.get('status') ?? 'PENDING';
     const { rows } = await pool.query<ReviewRow>(
       `SELECT id, import_type, reason, suggested_name, suggested_username, suggested_telegram_id,
-              suggested_email, candidate_ids, ai_suggestions, status, created_at
+              suggested_email, candidate_ids, ai_suggestions, status, created_at, raw_row
        FROM import_reviews WHERE status = $1 ORDER BY created_at DESC LIMIT 200`,
       [status]
     );
@@ -49,10 +52,26 @@ export async function GET(request: NextRequest) {
       for (const c of candRows) candidateMap.set(c.id, c);
     }
 
-    const results = rows.map((r) => ({
-      ...r,
-      candidates: (r.candidate_ids ?? []).map((id) => candidateMap.get(id)).filter(Boolean),
-    }));
+    const results = rows.map((r) => {
+      const { raw_row, ...rest } = r;
+      // List-import rows (Payment Plan etc.) may carry a "paid/total" fraction and a
+      // free-text lifetime mention that will be applied on resolve — surface what will
+      // actually get saved. Falls back to re-parsing raw_row.name for rows queued
+      // before this parsing existed, same as the resolve-time fallback in applyTypeRules.
+      let paymentHint: { amount: number | null; amountTotal: number | null; lifetime: boolean } | null = null;
+      if (getImportType(r.import_type) && raw_row) {
+        const fallbackFraction = raw_row.amount == null && raw_row.amountTotal == null ? parsePaidTotalFraction(raw_row.name) : null;
+        const amount = raw_row.amount ?? fallbackFraction?.paid ?? null;
+        const amountTotal = raw_row.amountTotal ?? fallbackFraction?.total ?? null;
+        const lifetime = !!raw_row.lifetimeMentioned || mentionsLifetimeAccess(raw_row.name);
+        if (amount != null || amountTotal != null || lifetime) paymentHint = { amount, amountTotal, lifetime };
+      }
+      return {
+        ...rest,
+        candidates: (r.candidate_ids ?? []).map((id) => candidateMap.get(id)).filter(Boolean),
+        paymentHint,
+      };
+    });
 
     return NextResponse.json({ results });
   } catch (err) {

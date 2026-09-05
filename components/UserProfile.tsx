@@ -38,6 +38,7 @@ interface UserDetail {
   offer_type?: string | null;
   payment_status?: string | null;
   amount_paid?: number | string | null;
+  amount_total?: number | string | null;
   premium_since?: string | null;
   lifetime_since?: string | null;
   email?: string | null;
@@ -511,6 +512,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
     offer_type?: string;
     payment_status?: string;
     amount_paid?: number | null;
+    amount_total?: number | null;
     email?: string;
     tags?: string[];
   }) => {
@@ -1052,6 +1054,16 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
                 onChange={(e) => setUser((u) => (u ? { ...u, amount_paid: e.target.value } : null))}
                 onBlur={() => handlePatch({ amount_paid: user.amount_paid === '' || user.amount_paid == null ? null : Number(user.amount_paid) })}
                 placeholder="0"
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0, minWidth: 140 }}>
+              <label style={{ fontSize: '0.75rem' }}>Plan total</label>
+              <input
+                type="number"
+                value={user.amount_total ?? ''}
+                onChange={(e) => setUser((u) => (u ? { ...u, amount_total: e.target.value } : null))}
+                onBlur={() => handlePatch({ amount_total: user.amount_total === '' || user.amount_total == null ? null : Number(user.amount_total) })}
+                placeholder="e.g. 4000"
               />
             </div>
             <div className="form-group" style={{ margin: 0, minWidth: 220 }}>

@@ -17,6 +17,12 @@ interface AiSuggestion {
   reason: string;
 }
 
+interface PaymentHint {
+  amount: number | null;
+  amountTotal: number | null;
+  lifetime: boolean;
+}
+
 interface ReviewRow {
   id: number;
   import_type: string;
@@ -27,6 +33,7 @@ interface ReviewRow {
   suggested_email: string | null;
   candidates: Candidate[];
   ai_suggestions: AiSuggestion[] | null;
+  paymentHint: PaymentHint | null;
   created_at: string;
 }
 
@@ -177,6 +184,16 @@ export default function ReviewQueuePage() {
             {row.suggested_username && <div><strong>Username:</strong> @{row.suggested_username}</div>}
             {row.suggested_telegram_id && <div><strong>Telegram ID:</strong> {row.suggested_telegram_id}</div>}
             {row.suggested_email && <div><strong>Email:</strong> {row.suggested_email}</div>}
+            {row.paymentHint && (row.paymentHint.amount != null || row.paymentHint.amountTotal != null) && (
+              <div>
+                <strong>Detected payment:</strong>{' '}
+                {row.paymentHint.amount != null ? `$${row.paymentHint.amount.toLocaleString()}` : '—'}
+                {row.paymentHint.amountTotal != null ? ` of $${row.paymentHint.amountTotal.toLocaleString()} total` : ''}
+              </div>
+            )}
+            {row.paymentHint?.lifetime && (
+              <div><span className="badge badge-success">Lifetime access mentioned</span></div>
+            )}
           </div>
 
           {row.candidates.length > 0 && (

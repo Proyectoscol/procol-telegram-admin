@@ -284,6 +284,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'COLD';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS offer_type TEXT DEFAULT 'UNKNOWN';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'UNKNOWN';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12, 2);
+-- Total the member is being charged for their plan (e.g. a "2400/3000" paid/total
+-- fraction in a pasted Payment Plan row) — distinct from amount_paid, which is how
+-- much of that total has actually come in so far.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS amount_total NUMERIC(12, 2);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS status_override TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS left_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday DATE;

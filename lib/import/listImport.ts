@@ -19,6 +19,8 @@ import {
   normalizeUsername,
   findUsernameToken,
   parseAmount,
+  parsePaidTotalFraction,
+  mentionsLifetimeAccess,
   isEmptyIdentity,
   buildMemberIndex,
   matchIdentity,
@@ -42,7 +44,7 @@ export interface ImportTypeConfig {
 
 export const IMPORT_TYPES: ImportTypeConfig[] = [
   { id: 'EMAIL', label: 'Email list', hint: 'name / username, email — one per line, comma or tab separated.' },
-  { id: 'PAYMENT_PLAN', label: 'Payment plan list', hint: 'name / username / email, amount (optional).', tag: 'Payment Plan', offerType: 'PAYMENT_PLAN', paymentStatus: 'PAYMENT_PLAN' },
+  { id: 'PAYMENT_PLAN', label: 'Payment plan list', hint: 'name / username / email, amount (optional). A "paid/total" fraction anywhere in the row (e.g. "2400/3000") is read as amount paid vs. plan total; a "LIFETIME ACCESS" mention anywhere in the row grants Lifetime too.', tag: 'Payment Plan', offerType: 'PAYMENT_PLAN', paymentStatus: 'PAYMENT_PLAN' },
   // Lifetime is its own product — it does NOT imply Premium (the reverse does).
   { id: 'LIFETIME', label: 'Lifetime member list', hint: 'name / username / email, amount (optional).', tag: 'Lifetime', offerType: 'LIFETIME', paymentStatus: 'PAID', lifetimeAccess: true },
   { id: 'PREMIUM', label: 'Premium member list', hint: 'name / username / email.', tag: 'Premium', offerType: 'PREMIUM', premiumAccess: true },
@@ -58,6 +60,10 @@ export function getImportType(id: string): ImportTypeConfig | undefined {
 
 export interface MemberRow extends Identity {
   amount: number | null;
+  /** Total the plan/offer is priced at, when the row gave a "paid/total" fraction (e.g. "2400/3000"). */
+  amountTotal: number | null;
+  /** Row's free text explicitly called out lifetime access (e.g. "- LIFETIME ACCESS"), regardless of the import type it was filed under. */
+  lifetimeMentioned: boolean;
   notes: string | null;
 }
 
@@ -133,10 +139,13 @@ export function parseMemberRows(text: string): MemberRow[] {
       );
       name = cand?.trim() || null;
     }
-    const amount = parseAmount(at(cols?.amount)) ?? (cols ? null : parts.map(parseAmount).find((a) => a != null) ?? null);
+    const fraction = parsePaidTotalFraction(lines[i]);
+    const amount = parseAmount(at(cols?.amount)) ?? fraction?.paid ?? (cols ? null : parts.map(parseAmount).find((a) => a != null) ?? null);
+    const amountTotal = fraction?.total ?? null;
+    const lifetimeMentioned = mentionsLifetimeAccess(lines[i]);
     const notes = at(cols?.notes)?.trim() || null;
 
-    rows.push({ name, username, telegramId, email, amount, notes });
+    rows.push({ name, username, telegramId, email, amount, amountTotal, lifetimeMentioned, notes });
   }
   return rows;
 }
@@ -163,6 +172,15 @@ export async function applyTypeRules(userId: number, typeId: string, row: Member
     sets.push(`${col} = $${params.length}`);
   };
 
+  // Re-derive the paid/total fraction and any "LIFETIME ACCESS" mention from the
+  // row's raw text when they weren't already parsed onto the row — covers review
+  // rows queued before this parsing existed (raw_row is frozen at creation time,
+  // so a row resolved today from an old queue entry still needs this fallback).
+  const fallbackFraction = row.amount == null && row.amountTotal == null ? parsePaidTotalFraction(row.name) : null;
+  const amount = row.amount ?? fallbackFraction?.paid ?? null;
+  const amountTotal = row.amountTotal ?? fallbackFraction?.total ?? null;
+  const lifetimeMentioned = row.lifetimeMentioned || mentionsLifetimeAccess(row.name);
+
   if (cfg.offerType) push('offer_type', cfg.offerType);
   if (cfg.paymentStatus) push('payment_status', cfg.paymentStatus);
   if (cfg.premiumAccess) {
@@ -170,20 +188,23 @@ export async function applyTypeRules(userId: number, typeId: string, row: Member
     sets.push(`premium_since = COALESCE(premium_since, NOW())`);
   }
   // Premium always cascades to Lifetime (one-directional); Lifetime alone never touches Premium.
-  if (cfg.premiumAccess || cfg.lifetimeAccess) {
+  // A free-text "LIFETIME ACCESS" mention grants it too, even under a different import type.
+  if (cfg.premiumAccess || cfg.lifetimeAccess || lifetimeMentioned) {
     push('is_lifetime', true);
     sets.push(`lifetime_since = COALESCE(lifetime_since, NOW())`);
   }
-  if (row.amount != null) push('amount_paid', row.amount);
+  if (amount != null) push('amount_paid', amount);
+  if (amountTotal != null) push('amount_total', amountTotal);
   if (typeId === 'EMAIL' && row.email) push('email', row.email);
   if (typeId === 'MEMBER_UPDATE') {
     if (row.email) push('email', row.email);
     if (row.notes) push('notes', row.notes);
   }
 
-  if (cfg.tag) {
-    // tags is a JSONB text array; add the tag if not already present.
-    params.push(JSON.stringify([cfg.tag]));
+  const tagsToAdd = [cfg.tag, lifetimeMentioned ? 'Lifetime' : null].filter((t): t is string => !!t);
+  if (tagsToAdd.length > 0) {
+    // tags is a JSONB text array; add these tags if not already present.
+    params.push(JSON.stringify(tagsToAdd));
     sets.push(`tags = (SELECT COALESCE(jsonb_agg(DISTINCT t), '[]'::jsonb) FROM jsonb_array_elements_text(tags || $${params.length}::jsonb) AS t)`);
   }
 

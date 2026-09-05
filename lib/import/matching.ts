@@ -64,6 +64,33 @@ export function parseAmount(field: string | undefined): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+/**
+ * Extracts a "paid/total" fraction like "2400/3000" from a pasted Payment
+ * Plan row — that's how much of the plan's total price has come in so far,
+ * distinct from a flat one-off amount. A slash between two digit groups
+ * doesn't show up any other way in these rows (dates use ordinals like
+ * "23rd", never a slash), so a single regex is enough regardless of the
+ * surrounding free text.
+ */
+export function parsePaidTotalFraction(text: string | null | undefined): { paid: number; total: number } | null {
+  if (!text) return null;
+  const m = text.match(/(\d[\d,]*)\s*\/\s*(\d[\d,]*)/);
+  if (!m) return null;
+  const paid = Number(m[1].replace(/,/g, ''));
+  const total = Number(m[2].replace(/,/g, ''));
+  if (Number.isNaN(paid) || Number.isNaN(total)) return null;
+  return { paid, total };
+}
+
+/**
+ * True when free text explicitly calls out lifetime access — e.g. a Payment
+ * Plan row with " - LIFETIME ACCESS" appended — so it can grant Lifetime
+ * even though the row was imported under a different type.
+ */
+export function mentionsLifetimeAccess(text: string | null | undefined): boolean {
+  return !!text && /lifetime\s+access/i.test(text);
+}
+
 export function isEmptyIdentity(row: Identity): boolean {
   return !row.name && !row.username && !row.telegramId && !row.email;
 }

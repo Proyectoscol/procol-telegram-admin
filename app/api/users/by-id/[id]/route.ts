@@ -137,7 +137,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
     }
     const body = await request.json();
-    const { is_premium, is_lifetime, assigned_to, notes, offer_type, payment_status, amount_paid, email, tags } = body;
+    const { is_premium, is_lifetime, assigned_to, notes, offer_type, payment_status, amount_paid, amount_total, email, tags } = body;
     const updates: string[] = [];
     const values: (string | number | boolean | null)[] = [];
     let idx = 1;
@@ -174,6 +174,10 @@ export async function PATCH(
       updates.push(`amount_paid = $${idx++}`);
       values.push(amount_paid === '' || amount_paid === null ? null : Number(amount_paid));
     }
+    if (amount_total !== undefined) {
+      updates.push(`amount_total = $${idx++}`);
+      values.push(amount_total === '' || amount_total === null ? null : Number(amount_total));
+    }
     if (email !== undefined) {
       updates.push(`email = $${idx++}`);
       values.push(email || null);
@@ -193,7 +197,7 @@ export async function PATCH(
     );
     const u = await pool.query(
       `SELECT id, from_id, display_name, username, is_premium, is_lifetime, premium_since, lifetime_since,
-              assigned_to, notes, offer_type, payment_status, amount_paid, email, tags
+              assigned_to, notes, offer_type, payment_status, amount_paid, amount_total, email, tags
        FROM users WHERE id = $1`,
       [id]
     );
