@@ -240,7 +240,7 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save');
       setTopMessagesAuthor(data.top_messages_default_author ?? null);
-      setTopMessagesAuthorMessage({ type: 'ok', text: 'Usuario predeterminado guardado.' });
+      setTopMessagesAuthorMessage({ type: 'ok', text: 'Default author saved.' });
     } catch (err) {
       setTopMessagesAuthorMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save' });
     } finally {
@@ -955,9 +955,9 @@ export default function SettingsPage() {
       </div>
 
       <div className="card" style={{ marginTop: '1.5rem' }}>
-        <h2 style={{ marginTop: 0 }}>Mensajes más gustados (Analytics)</h2>
+        <h2 style={{ marginTop: 0 }}>Top Liked Messages (Analytics)</h2>
         <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
-          Usuario que se usa por defecto para filtrar la tabla de &quot;mensajes más gustados&quot; en Analytics. Se puede cambiar temporalmente desde la propia pantalla de Analytics para esa sesión; al recargar vuelve a este predeterminado.
+          Default author used to filter the &quot;top liked messages&quot; table in Analytics. Can be changed temporarily from the Analytics screen itself for that session; on refresh it reverts to this default.
         </p>
         <MemberSearchInput
           value={topMessagesAuthor}
@@ -971,7 +971,7 @@ export default function SettingsPage() {
           disabled={topMessagesAuthorSaving}
           onClick={handleSaveTopMessagesAuthor}
         >
-          {topMessagesAuthorSaving ? 'Guardando…' : 'Guardar predeterminado'}
+          {topMessagesAuthorSaving ? 'Saving…' : 'Save default'}
         </button>
         {topMessagesAuthorMessage && (
           <p

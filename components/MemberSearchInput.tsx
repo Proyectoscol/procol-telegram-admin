@@ -21,7 +21,7 @@ export function MemberSearchInput({
   value,
   onSelect,
   onClear,
-  placeholder = 'Buscar miembro por nombre, usuario o email…',
+  placeholder = 'Search members by name, username, or email…',
 }: {
   value: MemberOption | null;
   onSelect: (member: MemberOption) => void;
@@ -61,7 +61,7 @@ export function MemberSearchInput({
             {value.username ? ` (@${value.username})` : ''}
           </span>
           <button type="button" className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem' }} onClick={onClear}>
-            Quitar
+            Remove
           </button>
         </div>
       )}
@@ -72,7 +72,7 @@ export function MemberSearchInput({
         onChange={(e) => setQ(e.target.value)}
         style={{ width: '100%', maxWidth: 320, background: '#0f1419', border: '1px solid #2f3336', color: '#e7e9ea', padding: '0.4rem 0.6rem', borderRadius: 6, fontSize: '0.8125rem' }}
       />
-      {searching && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: '#8b98a5' }}>Buscando…</span>}
+      {searching && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: '#8b98a5' }}>Searching…</span>}
       {results.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0 0' }}>
           {results
@@ -89,7 +89,7 @@ export function MemberSearchInput({
                     setResults([]);
                   }}
                 >
-                  {r.display_name || r.username || `Miembro ${r.id}`} {r.username ? `(@${r.username})` : ''}
+                  {r.display_name || r.username || `Member ${r.id}`} {r.username ? `(@${r.username})` : ''}
                 </button>
               </li>
             ))}

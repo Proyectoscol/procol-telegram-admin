@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingSpinner } from '@/components/Loading';
 import { MemberSearchInput, type MemberOption } from '@/components/MemberSearchInput';
 
@@ -32,8 +32,28 @@ interface MessageDetail {
   quotes: { message_id: number; author_from_id: string | null; author_display_name: string | null; author_username: string | null; text: string | null; date: string | null }[];
 }
 
+type SortKey = 'author' | 'chat' | 'date' | 'reactions' | 'quotes';
+
+const SORT_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'author', label: 'Author' },
+  { key: 'chat', label: 'Chat' },
+  { key: 'date', label: 'Date' },
+  { key: 'reactions', label: 'Reactions' },
+  { key: 'quotes', label: 'Quotes' },
+];
+
 function authorLabel(m: { author_display_name: string | null; author_username: string | null; author_from_id: string | null }): string {
   return m.author_display_name || (m.author_username ? `@${m.author_username}` : null) || m.author_from_id || '—';
+}
+
+function sortValue(m: TopMessage, key: SortKey): string | number {
+  switch (key) {
+    case 'author': return authorLabel(m).toLowerCase();
+    case 'chat': return (m.chat_name || '').toLowerCase();
+    case 'date': return m.date ? new Date(m.date).getTime() : 0;
+    case 'reactions': return m.reaction_count;
+    case 'quotes': return m.quote_count;
+  }
 }
 
 export function TopLikedMessages({
@@ -60,6 +80,9 @@ export function TopLikedMessages({
   const [messages, setMessages] = useState<TopMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [sortBy, setSortBy] = useState<SortKey>('reactions');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const [detail, setDetail] = useState<MessageDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -89,6 +112,17 @@ export function TopLikedMessages({
     return () => ctrl.abort();
   }, [chatIds.join(','), start, end, authorFilter?.from_id]);
 
+  const sortedMessages = useMemo(() => {
+    const copy = [...messages];
+    copy.sort((a, b) => {
+      const av = sortValue(a, sortBy);
+      const bv = sortValue(b, sortBy);
+      const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return copy;
+  }, [messages, sortBy, sortDir]);
+
   const openDetail = (chatId: number, messageId: number) => {
     setDetail(null);
     setDetailError(null);
@@ -110,14 +144,14 @@ export function TopLikedMessages({
 
   return (
     <div className="card" style={{ marginTop: '1.5rem' }}>
-      <h2 style={{ marginTop: 0 }}>Mensajes más gustados</h2>
+      <h2 style={{ marginTop: 0 }}>Top Liked Messages</h2>
       <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
-        Top 10 mensajes con más reacciones en el rango y chats filtrados. El conteo de citas es de todo el historial.
+        Top 10 messages by total reactions in the filtered range and chats. Quote counts are all-time.
       </p>
 
       <div style={{ marginBottom: '1rem' }}>
         <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.8125rem', color: '#8b98a5' }}>
-          Filtrar por autor {authorFilter && (isDefault ? '(predeterminado)' : '(esta sesión)')}
+          Filter by author {authorFilter && (isDefault ? '(default)' : '(this session)')}
         </span>
         <MemberSearchInput value={authorFilter} onSelect={setAuthorFilter} onClear={() => setAuthorFilter(null)} />
       </div>
@@ -125,13 +159,13 @@ export function TopLikedMessages({
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
           <LoadingSpinner size="sm" />
-          <span>Cargando…</span>
+          <span>Loading…</span>
         </div>
       ) : error ? (
         <p style={{ color: '#f91854', fontSize: '0.875rem' }}>{error}</p>
       ) : messages.length === 0 ? (
         <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
-          No hay mensajes con reacciones en el rango{authorFilter ? ' para este autor' : ''}.
+          No messages with reactions in this range{authorFilter ? ' for this author' : ''}.
         </p>
       ) : (
         <div className="table-wrap" style={{ overflowX: 'auto' }}>
@@ -139,16 +173,36 @@ export function TopLikedMessages({
             <thead>
               <tr>
                 <th className="th-index">#</th>
-                <th>Autor</th>
-                <th>Chat</th>
-                <th>Fecha</th>
-                <th>Reacciones</th>
-                <th>Citas</th>
+                {SORT_COLUMNS.map(({ key, label }) => (
+                  <th key={key} className="sortable-th">
+                    <span className="sortable-th-label">{label}</span>
+                    <span className="sortable-th-arrows">
+                      <button
+                        type="button"
+                        className={`sort-arrow ${sortBy === key && sortDir === 'asc' ? 'sort-arrow-active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setSortBy(key); setSortDir('asc'); }}
+                        aria-label={`Sort by ${label} ascending`}
+                        title="Sort ascending"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 2L2 6h6L5 2z" /></svg>
+                      </button>
+                      <button
+                        type="button"
+                        className={`sort-arrow ${sortBy === key && sortDir === 'desc' ? 'sort-arrow-active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setSortBy(key); setSortDir('desc'); }}
+                        aria-label={`Sort by ${label} descending`}
+                        title="Sort descending"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 8L2 4h6L5 8z" /></svg>
+                      </button>
+                    </span>
+                  </th>
+                ))}
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {messages.map((m, i) => (
+              {sortedMessages.map((m, i) => (
                 <tr key={`${m.chat_id}-${m.message_id}`}>
                   <td className="th-index">{i + 1}</td>
                   <td>{authorLabel(m)}</td>
@@ -165,7 +219,7 @@ export function TopLikedMessages({
                   <td>{m.quote_count}</td>
                   <td>
                     <button type="button" className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }} onClick={() => openDetail(m.chat_id, m.message_id)}>
-                      Ver detalle
+                      View detail
                     </button>
                   </td>
                 </tr>
@@ -179,7 +233,7 @@ export function TopLikedMessages({
         <div className="modal-backdrop" onClick={() => { setDetail(null); setDetailError(null); }} role="presentation">
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Detalle del mensaje</h3>
+              <h3>Message detail</h3>
               <button type="button" className="modal-close" onClick={() => { setDetail(null); setDetailError(null); }} aria-label="Close">
                 ×
               </button>
@@ -188,7 +242,7 @@ export function TopLikedMessages({
               {detailLoading ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
                   <LoadingSpinner size="sm" />
-                  <span>Cargando…</span>
+                  <span>Loading…</span>
                 </div>
               ) : detailError ? (
                 <p style={{ color: '#f91854', fontSize: '0.875rem' }}>{detailError}</p>
@@ -198,14 +252,14 @@ export function TopLikedMessages({
                     <p style={{ margin: '0 0 0.5rem', fontSize: '0.75rem', color: '#8b98a5' }}>
                       {detail.chat_name || '—'} · {authorLabel(detail)} · {detail.date ? new Date(detail.date).toLocaleString('en-US') : '—'}
                     </p>
-                    <p style={{ whiteSpace: 'pre-wrap', margin: 0, fontSize: '0.875rem' }}>{detail.text || <em>(sin texto{detail.media_type ? ` — ${detail.media_type}` : ''})</em>}</p>
+                    <p style={{ whiteSpace: 'pre-wrap', margin: 0, fontSize: '0.875rem' }}>{detail.text || <em>(no text{detail.media_type ? ` — ${detail.media_type}` : ''})</em>}</p>
                   </section>
                   <section>
                     <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem' }}>
-                      Reacciones ({detail.reactions.length})
+                      Reactions ({detail.reactions.length})
                     </h4>
                     {detail.reactions.length === 0 ? (
-                      <p style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>Sin reacciones.</p>
+                      <p style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>No reactions.</p>
                     ) : (
                       detail.reactions.map((r, idx) => (
                         <div key={idx} className="recent-msg">
@@ -217,17 +271,17 @@ export function TopLikedMessages({
                   </section>
                   <section>
                     <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem' }}>
-                      Citado por ({detail.quotes.length})
+                      Quoted by ({detail.quotes.length})
                     </h4>
                     {detail.quotes.length === 0 ? (
-                      <p style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>Nadie lo ha citado.</p>
+                      <p style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>No one has quoted it yet.</p>
                     ) : (
                       detail.quotes.map((q) => (
                         <div key={q.message_id} className="recent-msg">
                           <div className="meta">
                             {q.date ? new Date(q.date).toLocaleString('en-US') : ''} · {q.author_display_name || (q.author_username ? `@${q.author_username}` : q.author_from_id) || '—'}
                           </div>
-                          <div className="text">{q.text || <em>(sin texto)</em>}</div>
+                          <div className="text">{q.text || <em>(no text)</em>}</div>
                         </div>
                       ))
                     )}
