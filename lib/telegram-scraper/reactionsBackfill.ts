@@ -8,11 +8,14 @@
  * job re-fetches specific message ids by id (client.getMessages, not iterMessages) to pick up
  * both a fresher named-reactor sample and the authoritative per-emoji totals.
  *
- * Incremental via messages.reactions_synced_at (NULL/oldest first, skips anything synced in
+ * Incremental via messages.reactions_synced_at (never-synced first, skips anything synced in
  * the last 24h) — same self-resuming, budget-capped-per-click shape as profileSync.ts and
- * chatSync.ts. Reuses ingestExport() for every DB write (message/user/reaction/reaction-total
- * upserts), so this goes through the exact same conflict-safe logic as the live sync path —
- * see mapMessage()/collectPeers()/resolveNames() re-exported from chatSync.ts.
+ * chatSync.ts. Within the never-synced set, newest messages go first (not oldest) — that's
+ * what "Top Liked Messages" shows by default (last 3 months), so backfill progress becomes
+ * visible there fastest; older history still gets covered as later clicks work backwards.
+ * Reuses ingestExport() for every DB write (message/user/reaction/reaction-total upserts), so
+ * this goes through the exact same conflict-safe logic as the live sync path — see
+ * mapMessage()/collectPeers()/resolveNames() re-exported from chatSync.ts.
  */
 
 import { Api, type TelegramClient } from 'teleproto';
@@ -45,7 +48,7 @@ async function getCandidates(limit: number): Promise<Candidate[]> {
      JOIN telegram_scraper_groups g ON g.telegram_group_id = m.chat_id AND g.sync_chat = TRUE
      WHERE m.type = 'message'
        AND (m.reactions_synced_at IS NULL OR m.reactions_synced_at < NOW() - INTERVAL '${STALE_AFTER_HOURS} hours')
-     ORDER BY m.reactions_synced_at ASC NULLS FIRST, m.date ASC
+     ORDER BY m.reactions_synced_at ASC NULLS FIRST, m.date DESC
      LIMIT $1`,
     [limit]
   );
