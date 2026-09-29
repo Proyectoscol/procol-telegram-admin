@@ -32,20 +32,13 @@ import { pool, ensureSchema } from '@/lib/db/client';
 import { withScraperClient } from '@/lib/telegram-scraper/scrapeClient';
 import { ingestExport } from '@/lib/ingest/ingest';
 import type { TelegramExport, TelegramExportMessage } from '@/lib/ingest/types';
+import { peerToFromId, extractReactions } from '@/lib/telegram-scraper/reactionExtract';
 import { log } from '@/lib/logger';
 
 const PAGE_SIZE = 100; // matches Telegram's effective per-request getHistory cap
 const PER_GROUP_MAX_MESSAGES = 4000;
 const PER_GROUP_MAX_DURATION_MS = 90 * 1000;
 const TOTAL_MAX_DURATION_MS = 4.5 * 60 * 1000; // stay under the route's maxDuration
-
-function peerToFromId(peer: Api.TypePeer | undefined | null): string | undefined {
-  if (!peer) return undefined;
-  if (peer instanceof Api.PeerUser) return `user${peer.userId.toString()}`;
-  if (peer instanceof Api.PeerChannel) return `channel${peer.channelId.toString()}`;
-  if (peer instanceof Api.PeerChat) return `chat${peer.chatId.toString()}`;
-  return undefined;
-}
 
 function toIso(unixSeconds: number | undefined | null): string | undefined {
   if (unixSeconds == null) return undefined;
@@ -69,15 +62,8 @@ function resolveMediaType(media: Api.TypeMessageMedia | undefined): string | und
   return undefined;
 }
 
-function reactionEmoji(reaction: Api.TypeReaction | undefined): string | null {
-  if (!reaction) return null;
-  if (reaction instanceof Api.ReactionEmoji) return reaction.emoticon;
-  if (reaction instanceof Api.ReactionCustomEmoji) return 'custom';
-  return null;
-}
-
 /** Collects every Peer referenced by a page of messages (senders + reactors), for a single batched name-resolution pass. */
-function collectPeers(messages: Api.Message[]): Map<string, Api.TypePeer> {
+export function collectPeers(messages: Api.Message[]): Map<string, Api.TypePeer> {
   const peers = new Map<string, Api.TypePeer>();
   for (const msg of messages) {
     const fromId = peerToFromId(msg.fromId);
@@ -91,7 +77,7 @@ function collectPeers(messages: Api.Message[]): Map<string, Api.TypePeer> {
   return peers;
 }
 
-async function resolveNames(client: TelegramClient, peers: Map<string, Api.TypePeer>, cache: Map<string, string>): Promise<void> {
+export async function resolveNames(client: TelegramClient, peers: Map<string, Api.TypePeer>, cache: Map<string, string>): Promise<void> {
   for (const [fromId, peer] of Array.from(peers.entries())) {
     if (cache.has(fromId)) continue;
     try {
@@ -109,7 +95,7 @@ async function resolveNames(client: TelegramClient, peers: Map<string, Api.TypeP
   }
 }
 
-function mapMessage(msg: Api.Message, names: Map<string, string>): TelegramExportMessage | null {
+export function mapMessage(msg: Api.Message, names: Map<string, string>): TelegramExportMessage | null {
   if (msg instanceof Api.MessageEmpty) return null;
 
   const isService = msg instanceof Api.MessageService;
@@ -139,21 +125,17 @@ function mapMessage(msg: Api.Message, names: Map<string, string>): TelegramExpor
   const mediaType = resolveMediaType(msg.media);
   if (mediaType) out.media_type = mediaType;
 
-  const recent = msg.reactions?.recentReactions;
-  if (recent && recent.length > 0) {
+  const { recent, totals } = extractReactions(msg.reactions, names);
+  if (recent.length > 0) {
     const grouped = new Map<string, { from?: string; from_id?: string; date?: string }[]>();
-    for (const rr of recent) {
-      if (!(rr instanceof Api.MessagePeerReaction)) continue;
-      const emoji = reactionEmoji(rr.reaction);
-      if (!emoji) continue;
-      const reactorId = peerToFromId(rr.peerId);
-      if (!reactorId) continue;
-      if (!grouped.has(emoji)) grouped.set(emoji, []);
-      grouped.get(emoji)!.push({ from_id: reactorId, from: names.get(reactorId), date: toIso(rr.date) });
+    for (const r of recent) {
+      if (!grouped.has(r.emoji)) grouped.set(r.emoji, []);
+      grouped.get(r.emoji)!.push({ from_id: r.from_id, from: r.from, date: r.date });
     }
-    if (grouped.size > 0) {
-      out.reactions = Array.from(grouped.entries()).map(([emoji, list]) => ({ emoji, count: list.length, recent: list }));
-    }
+    out.reactions = Array.from(grouped.entries()).map(([emoji, list]) => ({ emoji, count: list.length, recent: list }));
+  }
+  if (totals.length > 0) {
+    out.reaction_totals = totals;
   }
 
   return out;
@@ -168,7 +150,7 @@ async function getMaxMessageId(chatId: number): Promise<number> {
   return max ? parseInt(max, 10) : 0;
 }
 
-function chatTypeOf(entity: Api.Channel): string {
+export function chatTypeOf(entity: Api.Channel): string {
   if (entity.broadcast) return 'channel';
   return entity.username ? 'public_supergroup' : 'private_supergroup';
 }

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingSpinner } from '@/components/Loading';
 import { MemberSearchInput, type MemberOption } from '@/components/MemberSearchInput';
 import { Pagination, PAGE_SIZE } from '@/components/Pagination';
+import { ExportCsvModal, type ExportColumn } from '@/components/ExportCsvModal';
+import { formatMessagesAsText, type MessageForTextExport } from '@/lib/utils/formatMessagesAsText';
 
 interface TopMessage {
   chat_id: number;
@@ -29,14 +31,14 @@ interface MessageDetail {
   date: string | null;
   text: string | null;
   media_type: string | null;
+  reaction_total: number;
   reactions: { reactor_from_id: string; reactor_display_name: string | null; reactor_username: string | null; emoji: string | null; reacted_at: string | null }[];
   quotes: { message_id: number; author_from_id: string | null; author_display_name: string | null; author_username: string | null; text: string | null; date: string | null }[];
 }
 
-type SortKey = 'author' | 'chat' | 'date' | 'reactions' | 'quotes';
+type SortKey = 'chat' | 'date' | 'reactions' | 'quotes';
 
 const SORT_COLUMNS: { key: SortKey; label: string }[] = [
-  { key: 'author', label: 'Author' },
   { key: 'chat', label: 'Chat' },
   { key: 'date', label: 'Date' },
   { key: 'reactions', label: 'Reactions' },
@@ -47,9 +49,21 @@ function authorLabel(m: { author_display_name: string | null; author_username: s
   return m.author_display_name || (m.author_username ? `@${m.author_username}` : null) || m.author_from_id || '—';
 }
 
+const MESSAGE_EXPORT_COLUMNS: ExportColumn[] = [
+  { key: 'rank', label: 'Rank' },
+  { key: 'author', label: 'Author' },
+  { key: 'chat', label: 'Chat' },
+  { key: 'date', label: 'Date' },
+  { key: 'text', label: 'Message' },
+  { key: 'reaction_count', label: 'Reactions' },
+  { key: 'reactions_breakdown', label: 'Reaction breakdown' },
+  { key: 'quote_count', label: 'Quotes' },
+];
+
+const EXPORT_COUNT_OPTIONS = [10, 20, 50, 100] as const;
+
 function sortValue(m: TopMessage, key: SortKey): string | number {
   switch (key) {
-    case 'author': return authorLabel(m).toLowerCase();
     case 'chat': return (m.chat_name || '').toLowerCase();
     case 'date': return m.date ? new Date(m.date).getTime() : 0;
     case 'reactions': return m.reaction_count;
@@ -90,6 +104,9 @@ export function TopLikedMessages({
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  const [exportCount, setExportCount] = useState<number>(10);
+  const [exportOpen, setExportOpen] = useState(false);
+
   useEffect(() => {
     if (!start || !end) return;
     setLoading(true);
@@ -128,6 +145,21 @@ export function TopLikedMessages({
 
   const pagedMessages = sortedMessages.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const exportRows = useMemo(
+    () =>
+      sortedMessages.slice(0, exportCount).map((m, i) => ({
+        rank: i + 1,
+        author: authorLabel(m),
+        chat: m.chat_name || '—',
+        date: m.date ? new Date(m.date).toLocaleString('en-US') : '—',
+        text: m.text || '(no text)',
+        reaction_count: m.reaction_count,
+        reactions_breakdown: m.reactions_by_emoji.map((e) => `${e.emoji ?? '❤️'} ${e.count}`).join(', '),
+        quote_count: m.quote_count,
+      })),
+    [sortedMessages, exportCount]
+  );
+
   const openDetail = (chatId: number, messageId: number) => {
     setDetail(null);
     setDetailError(null);
@@ -154,11 +186,35 @@ export function TopLikedMessages({
         All messages with reactions in the filtered range and chats, ranked by total reactions. Quote counts are all-time. Sort any column and page through the full list.
       </p>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.8125rem', color: '#8b98a5' }}>
-          Filter by author {authorFilter && (isDefault ? '(default)' : '(this session)')}
-        </span>
-        <MemberSearchInput value={authorFilter} onSelect={setAuthorFilter} onClear={() => setAuthorFilter(null)} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1rem' }}>
+        <div>
+          <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.8125rem', color: '#8b98a5' }}>
+            Filter by author {authorFilter && (isDefault ? '(default)' : '(this session)')}
+          </span>
+          <MemberSearchInput value={authorFilter} onSelect={setAuthorFilter} onClear={() => setAuthorFilter(null)} />
+        </div>
+        <div>
+          <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.8125rem', color: '#8b98a5' }}>
+            Export (by current sort)
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <select
+              value={exportCount}
+              onChange={(e) => setExportCount(Number(e.target.value))}
+              style={{ padding: '0.4rem 0.6rem', borderRadius: 6, border: '1px solid #2f3336', background: '#0f1419', color: '#e7e9ea', fontSize: '0.8125rem' }}
+            >
+              {EXPORT_COUNT_OPTIONS.map((n) => (
+                <option key={n} value={n} disabled={n > messages.length && messages.length > 0}>
+                  First {n}
+                </option>
+              ))}
+              <option value={messages.length || 1}>All fetched ({messages.length})</option>
+            </select>
+            <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8125rem', padding: '0.4rem 0.75rem' }} onClick={() => setExportOpen(true)} disabled={messages.length === 0}>
+              Export
+            </button>
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -178,6 +234,7 @@ export function TopLikedMessages({
             <thead>
               <tr>
                 <th className="th-index">#</th>
+                <th>Message</th>
                 {SORT_COLUMNS.map(({ key, label }) => (
                   <th key={key} className="sortable-th">
                     <span className="sortable-th-label">{label}</span>
@@ -210,7 +267,20 @@ export function TopLikedMessages({
               {pagedMessages.map((m, i) => (
                 <tr key={`${m.chat_id}-${m.message_id}`}>
                   <td className="th-index">{(page - 1) * PAGE_SIZE + i + 1}</td>
-                  <td>{authorLabel(m)}</td>
+                  <td style={{ maxWidth: 320, minWidth: 220 }}>
+                    <div
+                      style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        fontSize: '0.8125rem',
+                      }}
+                    >
+                      {m.text || <em style={{ color: '#8b98a5' }}>(no text)</em>}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#8b98a5', marginTop: '0.15rem' }}>{authorLabel(m)}</div>
+                  </td>
                   <td>{m.chat_name || '—'}</td>
                   <td>{m.date ? new Date(m.date).toLocaleString('en-US') : '—'}</td>
                   <td>
@@ -236,6 +306,17 @@ export function TopLikedMessages({
       {sortedMessages.length > 0 && (
         <Pagination currentPage={page} totalItems={sortedMessages.length} onPageChange={setPage} itemLabel="messages" />
       )}
+
+      <ExportCsvModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Export Top Liked Messages"
+        filenamePrefix="top-liked-messages"
+        rows={exportRows}
+        columns={MESSAGE_EXPORT_COLUMNS}
+        formatText={(rows) => formatMessagesAsText(rows as MessageForTextExport[])}
+        showMemberFilter={false}
+      />
 
       {(detailLoading || detail || detailError) && (
         <div className="modal-backdrop" onClick={() => { setDetail(null); setDetailError(null); }} role="presentation">
@@ -264,8 +345,15 @@ export function TopLikedMessages({
                   </section>
                   <section>
                     <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem' }}>
-                      Reactions ({detail.reactions.length})
+                      Reactions ({detail.reaction_total > detail.reactions.length
+                        ? `${detail.reactions.length} named of ${detail.reaction_total} total`
+                        : detail.reactions.length})
                     </h4>
+                    {detail.reaction_total > detail.reactions.length && (
+                      <p style={{ color: '#8b98a5', fontSize: '0.75rem', marginTop: '-0.25rem', marginBottom: '0.5rem' }}>
+                        Telegram only exposes a capped sample of named reactors — the true total is higher than who we can name.
+                      </p>
+                    )}
                     {detail.reactions.length === 0 ? (
                       <p style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>No reactions.</p>
                     ) : (

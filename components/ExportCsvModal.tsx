@@ -38,6 +38,10 @@ interface ExportCsvModalProps {
   filenamePrefix: string;
   rows: Record<string, unknown>[];
   columns: ExportColumn[];
+  /** Formats rows for the "Formatted Text" tab. Defaults to the member-list formatter (existing behavior). */
+  formatText?: (rows: Record<string, unknown>[]) => string;
+  /** Shows the "Member status" (all/member/former) filter section. Defaults to true (existing behavior) — set false for non-member row shapes. */
+  showMemberFilter?: boolean;
 }
 
 type ExportFormat = 'csv' | 'formattedText';
@@ -49,6 +53,8 @@ export function ExportCsvModal({
   filenamePrefix,
   rows,
   columns,
+  formatText = (r) => formatMembersAsText(r as MemberForTextExport[]),
+  showMemberFilter = true,
 }: ExportCsvModalProps) {
   const [memberFilter, setMemberFilter] = useState<MemberFilter>('all');
   const [exportFormat, setExportFormat] = useState<ExportFormat>('csv');
@@ -56,17 +62,17 @@ export function ExportCsvModal({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set(columns.map((c) => c.key)));
 
   const filteredRows = useMemo(() => {
-    if (memberFilter === 'all') return rows;
+    if (!showMemberFilter || memberFilter === 'all') return rows;
     const isMember = memberFilter === 'member';
     return rows.filter((r) => {
       const v = r.is_current_member;
       return Boolean(v) === isMember;
     });
-  }, [rows, memberFilter]);
+  }, [rows, memberFilter, showMemberFilter]);
 
   const formattedText = useMemo(
-    () => formatMembersAsText(filteredRows as MemberForTextExport[]),
-    [filteredRows]
+    () => formatText(filteredRows),
+    [filteredRows, formatText]
   );
 
   useEffect(() => {
@@ -132,29 +138,36 @@ export function ExportCsvModal({
           </button>
         </div>
         <div className="modal-body">
-          <section>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.8125rem' }}>
-              Member status
-            </label>
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-              {(['all', 'member', 'former'] as const).map((value) => (
-                <label key={value} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
-                  <input
-                    type="radio"
-                    name="memberFilter"
-                    checked={memberFilter === value}
-                    onChange={() => setMemberFilter(value)}
-                  />
-                  <span>
-                    {value === 'all' ? 'All' : value === 'member' ? 'Members only' : 'Former only'}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <p style={{ color: '#8b98a5', fontSize: '0.75rem', marginTop: '0.35rem', marginBottom: 0 }}>
+          {showMemberFilter && (
+            <section>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.8125rem' }}>
+                Member status
+              </label>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                {(['all', 'member', 'former'] as const).map((value) => (
+                  <label key={value} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="memberFilter"
+                      checked={memberFilter === value}
+                      onChange={() => setMemberFilter(value)}
+                    />
+                    <span>
+                      {value === 'all' ? 'All' : value === 'member' ? 'Members only' : 'Former only'}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p style={{ color: '#8b98a5', fontSize: '0.75rem', marginTop: '0.35rem', marginBottom: 0 }}>
+                {filteredRows.length} row{filteredRows.length !== 1 ? 's' : ''} will be exported.
+              </p>
+            </section>
+          )}
+          {!showMemberFilter && (
+            <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: 0 }}>
               {filteredRows.length} row{filteredRows.length !== 1 ? 's' : ''} will be exported.
             </p>
-          </section>
+          )}
           <section>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.8125rem' }}>
               Export format
@@ -237,7 +250,7 @@ export function ExportCsvModal({
                   color: 'inherit',
                   resize: 'vertical',
                 }}
-                aria-label="Formatted member list for Telegram"
+                aria-label="Formatted list for Telegram"
               />
             </section>
           )}

@@ -242,6 +242,61 @@ export async function ingestExport(data: TelegramExport, filename: string): Prom
   }
   log.startup(`[ingest] ✅ Reactions done — ${reactionsInserted} inserted, ${reactionsSkipped} skipped in ${Date.now() - t3}ms`);
 
+  // ── 4b. Upsert true per-emoji reaction totals (live-sync only — reaction_totals is never
+  // set for manual JSON uploads) and stamp reactions_synced_at for messages we just got fresh
+  // totals for, so the historical backfill doesn't immediately re-touch them.
+  type ReactionTotalRow = { messageId: number; emoji: string; totalCount: number };
+  const reactionTotalRows: ReactionTotalRow[] = [];
+  const syncedMessageIds: number[] = [];
+
+  for (const msg of messages) {
+    if (!isValidMessageId(msg.id)) continue;
+    if (!msg.reaction_totals || msg.reaction_totals.length === 0) continue;
+    syncedMessageIds.push(msg.id);
+    for (const rt of msg.reaction_totals) {
+      if (!rt.emoji) continue;
+      reactionTotalRows.push({ messageId: msg.id, emoji: rt.emoji, totalCount: rt.count });
+    }
+  }
+
+  if (reactionTotalRows.length > 0) {
+    const totalBatches = chunks(reactionTotalRows, BATCH_SIZE);
+    for (let batchIdx = 0; batchIdx < totalBatches.length; batchIdx++) {
+      const batch = totalBatches[batchIdx];
+      try {
+        await pool.query(
+          `INSERT INTO message_reaction_totals (chat_id, message_id, emoji, total_count, updated_at)
+           SELECT $1, unnest($2::bigint[]), unnest($3::text[]), unnest($4::int[]), NOW()
+           ON CONFLICT (chat_id, message_id, emoji) DO UPDATE SET total_count = EXCLUDED.total_count, updated_at = NOW()`,
+          [
+            chatId,
+            batch.map(r => r.messageId),
+            batch.map(r => r.emoji),
+            batch.map(r => r.totalCount),
+          ]
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.error('ingest', `Reaction totals batch ${batchIdx} failed: ${msg}`);
+      }
+    }
+  }
+
+  if (syncedMessageIds.length > 0) {
+    const idBatches = chunks(syncedMessageIds, BATCH_SIZE);
+    for (const batch of idBatches) {
+      try {
+        await pool.query(
+          `UPDATE messages SET reactions_synced_at = NOW() WHERE chat_id = $1 AND message_id = ANY($2::bigint[])`,
+          [chatId, batch]
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.error('ingest', `Stamping reactions_synced_at failed: ${msg}`);
+      }
+    }
+  }
+
   // ── 5. Record import batch ───────────────────────────────────────────────
   await pool.query(
     `INSERT INTO import_batches (chat_id, filename, messages_inserted, messages_skipped, reactions_inserted, reactions_skipped)

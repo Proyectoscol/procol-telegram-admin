@@ -116,6 +116,17 @@ CREATE TABLE IF NOT EXISTS messages (
   UNIQUE(chat_id, message_id)
 );
 
+-- "Sync chats"/backfill: when this message's reaction totals were last pulled live via
+-- MTProto (msg.reactions.results). NULL = never synced with true totals (only has whatever
+-- capped "recentReactions" sample reactions.recentReactions/manual JSON export gave us).
+-- Drives incremental backfill batching (oldest/NULL first) — see lib/telegram-scraper/reactionsBackfill.ts.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'reactions_synced_at') THEN
+    ALTER TABLE messages ADD COLUMN reactions_synced_at TIMESTAMPTZ;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS reactions (
   id SERIAL PRIMARY KEY,
   chat_id BIGINT NOT NULL REFERENCES chats(id),
@@ -126,6 +137,21 @@ CREATE TABLE IF NOT EXISTS reactions (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(chat_id, message_id, reactor_from_id)
 );
+
+-- True per-emoji reaction totals from Telegram (msg.reactions.results), independent of how many
+-- individual reactors we can actually name (reactions.recentReactions is capped server-side by
+-- Telegram and is NEVER the full count). This table is the source of truth for "how many"; the
+-- `reactions` table above stays the best-effort "who" sample.
+CREATE TABLE IF NOT EXISTS message_reaction_totals (
+  id SERIAL PRIMARY KEY,
+  chat_id BIGINT NOT NULL REFERENCES chats(id),
+  message_id BIGINT NOT NULL,
+  emoji TEXT NOT NULL,
+  total_count INT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(chat_id, message_id, emoji)
+);
+CREATE INDEX IF NOT EXISTS idx_message_reaction_totals_chat_message ON message_reaction_totals(chat_id, message_id);
 
 CREATE TABLE IF NOT EXISTS import_batches (
   id SERIAL PRIMARY KEY,
@@ -179,6 +205,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_type_date ON messages(type, date);
 CREATE INDEX IF NOT EXISTS idx_messages_chat_type_date ON messages(chat_id, type, date);
 -- actor_id composite for service message counts.
 CREATE INDEX IF NOT EXISTS idx_messages_actor_chat ON messages(actor_id, chat_id) WHERE actor_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_reactions_synced_at ON messages(reactions_synced_at) WHERE type = 'message';
 
 -- Settings (key-value); values stored encoded. Key: openai_api_key, etc.
 CREATE TABLE IF NOT EXISTS settings (

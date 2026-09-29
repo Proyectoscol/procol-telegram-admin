@@ -21,6 +21,12 @@ export interface TelegramExportMessage {
     count?: number;
     recent?: { from?: string; from_id?: string; date?: string }[];
   }[];
+  /**
+   * True per-emoji reaction totals from Telegram (msg.reactions.results). Only ever populated
+   * by the live MTProto scraper (lib/telegram-scraper/chatSync.ts) — manual Telegram Desktop
+   * JSON exports never include real totals, only the capped `reactions[].recent` sample above.
+   */
+  reaction_totals?: { emoji: string; count: number }[];
 }
 
 export interface TelegramExport {

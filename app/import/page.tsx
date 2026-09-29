@@ -381,6 +381,32 @@ export default function ImportPage() {
     }
   };
 
+  const [reactionsSyncing, setReactionsSyncing] = useState(false);
+  const [reactionsSyncResult, setReactionsSyncResult] = useState<{
+    processed: number;
+    updated: number;
+    failed: number;
+    hasMore: boolean;
+    floodWaitSeconds?: number;
+  } | null>(null);
+  const [reactionsSyncError, setReactionsSyncError] = useState<string | null>(null);
+
+  const handleReactionsSync = async () => {
+    setReactionsSyncError(null);
+    setReactionsSyncResult(null);
+    setReactionsSyncing(true);
+    try {
+      const res = await fetch('/api/telegram-scraper/sync-reactions', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Backfill failed');
+      setReactionsSyncResult(data);
+    } catch (err) {
+      setReactionsSyncError(err instanceof Error ? err.message : 'Backfill failed');
+    } finally {
+      setReactionsSyncing(false);
+    }
+  };
+
   const profileSyncState = useSyncExternalStore(subscribeProfileSync, getProfileSyncState, getProfileSyncState);
   const { syncing: profileSyncing, result: profileSyncResult, error: profileSyncError } = profileSyncState;
   const handleProfileSync = () => { startProfileSync(); };
@@ -516,6 +542,38 @@ export default function ImportPage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Backfill reaction totals (Telegram)</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Telegram only ever gives us a capped sample of named reactors per message (&quot;recent reactions&quot;) —
+          never the true total. This re-fetches already-synced messages to pick up Telegram&apos;s real per-emoji
+          reaction counts, which power the &quot;Top Liked Messages&quot; ranking in Analytics. Capped per click, so a
+          large backlog may take a few clicks — keep clicking until it reports nothing left to do.
+        </p>
+        <button type="button" className="btn" onClick={handleReactionsSync} disabled={reactionsSyncing}>
+          {reactionsSyncing ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+              <LoadingSpinner size="sm" />
+              Backfilling…
+            </span>
+          ) : (
+            'Backfill reaction totals'
+          )}
+        </button>
+        {reactionsSyncError && <div className="alert alert-error" style={{ marginTop: '1rem' }}>{reactionsSyncError}</div>}
+        {reactionsSyncResult && (
+          <div className="alert alert-success" style={{ marginTop: '1rem' }}>
+            {reactionsSyncResult.processed} message{reactionsSyncResult.processed === 1 ? '' : 's'} checked,{' '}
+            {reactionsSyncResult.updated} updated with real totals
+            {reactionsSyncResult.failed > 0 && `, ${reactionsSyncResult.failed} failed`}.
+            {reactionsSyncResult.floodWaitSeconds != null && (
+              <span style={{ color: '#f90' }}> Telegram asked us to slow down ({reactionsSyncResult.floodWaitSeconds}s) — try again shortly.</span>
+            )}
+            {reactionsSyncResult.hasMore && <span style={{ color: '#f90' }}> More to backfill — click again.</span>}
           </div>
         )}
       </section>
