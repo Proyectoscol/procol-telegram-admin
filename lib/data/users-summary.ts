@@ -75,9 +75,11 @@ export async function getUsersSummaryData(
       GROUP BY uid
     ),
     reactions_received AS (
-      SELECT m.from_id, COUNT(*)::int AS reactions_received
-      FROM reactions r
-      JOIN messages m ON r.chat_id = m.chat_id AND r.message_id = m.message_id
+      SELECT m.from_id,
+             SUM(COALESCE(rt.total, rc.cnt, 0))::int AS reactions_received
+      FROM messages m
+      LEFT JOIN LATERAL (SELECT SUM(mrt.total_count)::int AS total FROM message_reaction_totals mrt WHERE mrt.chat_id = m.chat_id AND mrt.message_id = m.message_id) rt ON true
+      LEFT JOIN LATERAL (SELECT COUNT(*)::int AS cnt FROM reactions r2 WHERE r2.chat_id = m.chat_id AND r2.message_id = m.message_id) rc ON true
       WHERE m.from_id IS NOT NULL ${chatCondM}
       GROUP BY m.from_id
     ),

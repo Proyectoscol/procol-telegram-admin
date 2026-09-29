@@ -56,7 +56,11 @@ export async function GET(
           (SELECT COUNT(*)::int FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}) AS messages_sent,
           (SELECT COUNT(*)::int FROM messages WHERE actor_id = $1 AND type = 'service'${chatCond}) AS service_messages,
           (SELECT COUNT(*)::int FROM reactions WHERE reactor_from_id = $1${chatCond}) AS reactions_given,
-          (SELECT COUNT(*)::int FROM messages m JOIN reactions r ON m.chat_id = r.chat_id AND m.message_id = r.message_id WHERE m.from_id = $1${chatIds && chatIds.length > 0 ? ' AND m.chat_id = ANY($2::bigint[])' : ''}) AS reactions_received,
+          (SELECT COALESCE(SUM(COALESCE(rt.total, rc.cnt, 0)), 0)::int
+             FROM messages m
+             LEFT JOIN LATERAL (SELECT SUM(mrt.total_count)::int AS total FROM message_reaction_totals mrt WHERE mrt.chat_id = m.chat_id AND mrt.message_id = m.message_id) rt ON true
+             LEFT JOIN LATERAL (SELECT COUNT(*)::int AS cnt FROM reactions r2 WHERE r2.chat_id = m.chat_id AND r2.message_id = m.message_id) rc ON true
+             WHERE m.from_id = $1${chatIds && chatIds.length > 0 ? ' AND m.chat_id = ANY($2::bigint[])' : ''}) AS reactions_received,
           (SELECT COALESCE(SUM(LENGTH(COALESCE(text, ''))), 0)::bigint FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}) AS total_chars,
           (SELECT COALESCE(SUM(GREATEST(0, LENGTH(TRIM(COALESCE(text, '')))::int - LENGTH(REPLACE(TRIM(COALESCE(text, '')), ' ', '')) + 1)), 0)::bigint FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}) AS total_words,
           (SELECT COUNT(DISTINCT DATE(date))::int FROM messages WHERE from_id = $1 AND type = 'message'${chatCond}) AS active_days,
