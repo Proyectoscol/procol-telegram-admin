@@ -1,7 +1,9 @@
 import { ensureSchema, queryWithRetry } from '@/lib/db/client';
 import { getTopMessagesDefaultAuthorFromId } from '@/lib/settings';
 
-const TOP_MESSAGES_LIMIT = 10;
+// Safety cap on rows fetched per request — the UI paginates client-side (10 per page)
+// through everything up to this cap, ordered by reaction count.
+const MAX_MESSAGES_FETCHED = 500;
 
 export interface DefaultAuthor {
   from_id: string;
@@ -42,9 +44,10 @@ interface TopMessageParams {
 }
 
 /**
- * Top N messages by total reaction count within [start, end) by message date.
- * Reaction totals and quote_count are all-time (a message posted in range keeps
- * accumulating reactions/quotes after the fact) — only the message's own date is range-bound.
+ * All messages with at least one reaction within [start, end) by message date, ranked by
+ * total reaction count (highest first). Reaction totals and quote_count are all-time (a
+ * message posted in range keeps accumulating reactions/quotes after the fact) — only the
+ * message's own date is range-bound. Capped at MAX_MESSAGES_FETCHED; the client paginates.
  */
 export async function getTopLikedMessages({ chatIds, start, end, authorFromId }: TopMessageParams): Promise<TopMessage[]> {
   await ensureSchema();
@@ -87,7 +90,7 @@ export async function getTopLikedMessages({ chatIds, start, end, authorFromId }:
      GROUP BY m.chat_id, m.message_id, c.name, m.from_id, au.display_name, au.username, m.date, m.text
      HAVING COUNT(r.id) > 0
      ORDER BY reaction_count DESC, m.date DESC
-     LIMIT ${TOP_MESSAGES_LIMIT}`,
+     LIMIT ${MAX_MESSAGES_FETCHED}`,
     params
   );
 

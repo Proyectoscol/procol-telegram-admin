@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingSpinner } from '@/components/Loading';
 import { MemberSearchInput, type MemberOption } from '@/components/MemberSearchInput';
+import { Pagination, PAGE_SIZE } from '@/components/Pagination';
 
 interface TopMessage {
   chat_id: number;
@@ -83,6 +84,7 @@ export function TopLikedMessages({
 
   const [sortBy, setSortBy] = useState<SortKey>('reactions');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
 
   const [detail, setDetail] = useState<MessageDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -106,6 +108,7 @@ export function TopLikedMessages({
         if (payload.error) throw new Error(payload.error);
         setMessages(Array.isArray(payload.messages) ? payload.messages : []);
         setError(null);
+        setPage(1);
       })
       .catch((e) => { if (e?.name !== 'AbortError') setError(e.message); })
       .finally(() => setLoading(false));
@@ -122,6 +125,8 @@ export function TopLikedMessages({
     });
     return copy;
   }, [messages, sortBy, sortDir]);
+
+  const pagedMessages = sortedMessages.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const openDetail = (chatId: number, messageId: number) => {
     setDetail(null);
@@ -146,7 +151,7 @@ export function TopLikedMessages({
     <div className="card" style={{ marginTop: '1.5rem' }}>
       <h2 style={{ marginTop: 0 }}>Top Liked Messages</h2>
       <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
-        Top 10 messages by total reactions in the filtered range and chats. Quote counts are all-time.
+        All messages with reactions in the filtered range and chats, ranked by total reactions. Quote counts are all-time. Sort any column and page through the full list.
       </p>
 
       <div style={{ marginBottom: '1rem' }}>
@@ -180,7 +185,7 @@ export function TopLikedMessages({
                       <button
                         type="button"
                         className={`sort-arrow ${sortBy === key && sortDir === 'asc' ? 'sort-arrow-active' : ''}`}
-                        onClick={(e) => { e.stopPropagation(); setSortBy(key); setSortDir('asc'); }}
+                        onClick={(e) => { e.stopPropagation(); setSortBy(key); setSortDir('asc'); setPage(1); }}
                         aria-label={`Sort by ${label} ascending`}
                         title="Sort ascending"
                       >
@@ -189,7 +194,7 @@ export function TopLikedMessages({
                       <button
                         type="button"
                         className={`sort-arrow ${sortBy === key && sortDir === 'desc' ? 'sort-arrow-active' : ''}`}
-                        onClick={(e) => { e.stopPropagation(); setSortBy(key); setSortDir('desc'); }}
+                        onClick={(e) => { e.stopPropagation(); setSortBy(key); setSortDir('desc'); setPage(1); }}
                         aria-label={`Sort by ${label} descending`}
                         title="Sort descending"
                       >
@@ -202,9 +207,9 @@ export function TopLikedMessages({
               </tr>
             </thead>
             <tbody>
-              {sortedMessages.map((m, i) => (
+              {pagedMessages.map((m, i) => (
                 <tr key={`${m.chat_id}-${m.message_id}`}>
-                  <td className="th-index">{i + 1}</td>
+                  <td className="th-index">{(page - 1) * PAGE_SIZE + i + 1}</td>
                   <td>{authorLabel(m)}</td>
                   <td>{m.chat_name || '—'}</td>
                   <td>{m.date ? new Date(m.date).toLocaleString('en-US') : '—'}</td>
@@ -227,6 +232,9 @@ export function TopLikedMessages({
             </tbody>
           </table>
         </div>
+      )}
+      {sortedMessages.length > 0 && (
+        <Pagination currentPage={page} totalItems={sortedMessages.length} onPageChange={setPage} itemLabel="messages" />
       )}
 
       {(detailLoading || detail || detailError) && (
