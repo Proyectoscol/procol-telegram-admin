@@ -31,6 +31,7 @@ import {
   getPersonaPrompts,
   getDayInsightPrompts,
 } from '@/lib/settings';
+import { getTopMessagesDefaultAuthor } from '@/lib/data/top-messages';
 import { PERSONA_MODEL_OPTIONS } from '@/lib/ai/model-pricing';
 
 const PERSONA_KEYS_FOR_GET = [
@@ -63,6 +64,7 @@ export async function getSettingsData(): Promise<Record<string, unknown>> {
     await ensureSchema();
     await getPersonaPrompts();
     await getDayInsightPrompts();
+    const topMessagesDefaultAuthor = await getTopMessagesDefaultAuthor();
     const openaiRows = await queryWithRetry<{ key: string }>('SELECT key FROM settings WHERE key = $1', [SETTING_OPENAI_API_KEY]);
     const personaRows = await queryWithRetry<{ key: string; value: string }>(
       'SELECT key, value FROM settings WHERE key = ANY($1::text[])',
@@ -99,6 +101,7 @@ export async function getSettingsData(): Promise<Record<string, unknown>> {
     persona_model_options: PERSONA_MODEL_OPTIONS,
     day_insight_system_prompt: map.get(SETTING_DAY_INSIGHT_SYSTEM_PROMPT)?.trim() ?? DEFAULT_DAY_INSIGHT_SYSTEM_PROMPT,
     day_insight_user_prompt_template: map.get(SETTING_DAY_INSIGHT_USER_PROMPT_TEMPLATE)?.trim() ?? DEFAULT_DAY_INSIGHT_USER_PROMPT_TEMPLATE,
+    top_messages_default_author: topMessagesDefaultAuthor,
   };
   }, SETTINGS_DATA_TTL_MS);
 }

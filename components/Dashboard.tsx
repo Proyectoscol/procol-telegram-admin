@@ -13,6 +13,8 @@ import {
   AreaChart,
 } from 'recharts';
 import { ChatSelector } from '@/components/ChatSelector';
+import { TopLikedMessages } from '@/components/TopLikedMessages';
+import type { MemberOption } from '@/components/MemberSearchInput';
 import { ExportCsvModal, type ExportColumn } from '@/components/ExportCsvModal';
 import { LoadingCard, LoadingOverlay, LoadingSpinner } from '@/components/Loading';
 import { Pagination, PAGE_SIZE } from '@/components/Pagination';
@@ -187,6 +189,7 @@ export function Dashboard() {
   const [selectedChatIds, setSelectedChatIds] = useState<number[]>([]);
   const [fromId, setFromId] = useState<string>('');
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
+  const [topMessagesDefaultAuthor, setTopMessagesDefaultAuthor] = useState<MemberOption | null>(null);
   const CHAT_COLORS = ['#00ba7c', '#1d9bf0', '#ff9500', '#7856ff', '#00d4aa', '#e6007a', '#ffd400', '#0891b2', '#22c55e', '#a855f7'];
   const chatIdToColor = useMemo(() => {
     const sorted = [...chats].sort((a, b) => Number(a.id) - Number(b.id));
@@ -295,6 +298,7 @@ export function Dashboard() {
         }
         if (payload.overview) setData(payload.overview);
         if (Array.isArray(payload.usersSummary)) setUsersSummary(payload.usersSummary);
+        if (payload.topMessagesDefaultAuthor !== undefined) setTopMessagesDefaultAuthor(payload.topMessagesDefaultAuthor);
       })
       .catch((e) => { if (e?.name !== 'AbortError') setError(e.message); })
       .finally(() => setLoading(false));
@@ -751,6 +755,8 @@ export function Dashboard() {
           <div className="label">Active users (last 30 days)</div>
         </div>
       </div>
+
+      <TopLikedMessages chatIds={selectedChatIds} start={start} end={end} defaultAuthor={topMessagesDefaultAuthor} />
 
       <div className="card">
         <h2>Messages over time</h2>

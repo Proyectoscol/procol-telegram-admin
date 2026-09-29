@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ChatSelector } from '@/components/ChatSelector';
 import { LoadingCard } from '@/components/Loading';
 import { LogoutButton } from '@/components/LogoutButton';
+import { MemberSearchInput, type MemberOption } from '@/components/MemberSearchInput';
 
 export default function SettingsPage() {
   const [openaiConfigured, setOpenaiConfigured] = useState<boolean | null>(null);
@@ -31,6 +32,9 @@ export default function SettingsPage() {
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
   const [personaSaving, setPersonaSaving] = useState(false);
   const [personaMessage, setPersonaMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+  const [topMessagesAuthor, setTopMessagesAuthor] = useState<MemberOption | null>(null);
+  const [topMessagesAuthorSaving, setTopMessagesAuthorSaving] = useState(false);
+  const [topMessagesAuthorMessage, setTopMessagesAuthorMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [promptsSaving, setPromptsSaving] = useState(false);
   const [promptsMessage, setPromptsMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [dayInsightSystemPrompt, setDayInsightSystemPrompt] = useState<string>('');
@@ -126,6 +130,7 @@ export default function SettingsPage() {
         setCacheTtlStatsMinutes(typeof data.cache_ttl_stats_minutes === 'number' ? data.cache_ttl_stats_minutes : parseInt(String(data.cache_ttl_stats_minutes), 10) || 2);
         setDayInsightSystemPrompt(typeof data.day_insight_system_prompt === 'string' ? data.day_insight_system_prompt : '');
         setDayInsightUserPromptTemplate(typeof data.day_insight_user_prompt_template === 'string' ? data.day_insight_user_prompt_template : '');
+        setTopMessagesAuthor(data.top_messages_default_author ?? null);
         if (Array.isArray(payload.chats)) setChats(payload.chats);
         if (payload.aiUsage != null) {
           setAiUsageLogs(payload.aiUsage.logs ?? []);
@@ -220,6 +225,26 @@ export default function SettingsPage() {
       setPersonaMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save' });
     } finally {
       setPersonaSaving(false);
+    }
+  };
+
+  const handleSaveTopMessagesAuthor = async () => {
+    setTopMessagesAuthorMessage(null);
+    setTopMessagesAuthorSaving(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ top_messages_default_author_from_id: topMessagesAuthor?.from_id ?? null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save');
+      setTopMessagesAuthor(data.top_messages_default_author ?? null);
+      setTopMessagesAuthorMessage({ type: 'ok', text: 'Usuario predeterminado guardado.' });
+    } catch (err) {
+      setTopMessagesAuthorMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save' });
+    } finally {
+      setTopMessagesAuthorSaving(false);
     }
   };
 
@@ -927,6 +952,41 @@ export default function SettingsPage() {
             </p>
           )}
         </form>
+      </div>
+
+      <div className="card" style={{ marginTop: '1.5rem' }}>
+        <h2 style={{ marginTop: 0 }}>Mensajes más gustados (Analytics)</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Usuario que se usa por defecto para filtrar la tabla de &quot;mensajes más gustados&quot; en Analytics. Se puede cambiar temporalmente desde la propia pantalla de Analytics para esa sesión; al recargar vuelve a este predeterminado.
+        </p>
+        <MemberSearchInput
+          value={topMessagesAuthor}
+          onSelect={setTopMessagesAuthor}
+          onClear={() => setTopMessagesAuthor(null)}
+        />
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ marginTop: '1rem' }}
+          disabled={topMessagesAuthorSaving}
+          onClick={handleSaveTopMessagesAuthor}
+        >
+          {topMessagesAuthorSaving ? 'Guardando…' : 'Guardar predeterminado'}
+        </button>
+        {topMessagesAuthorMessage && (
+          <p
+            style={{
+              marginTop: '1rem',
+              padding: '0.5rem 0.75rem',
+              borderRadius: 6,
+              background: topMessagesAuthorMessage.type === 'ok' ? 'rgba(0,186,124,0.15)' : 'rgba(249,24,84,0.15)',
+              color: topMessagesAuthorMessage.type === 'ok' ? '#00ba7c' : '#f91854',
+              fontSize: '0.875rem',
+            }}
+          >
+            {topMessagesAuthorMessage.text}
+          </p>
+        )}
       </div>
 
       <div className="card" style={{ marginTop: '1.5rem' }}>

@@ -25,6 +25,7 @@ export const SETTING_INGEST_MAIN_CHAT_SLUG = 'ingest_main_chat_slug';
 export const SETTING_PERSONA_CHAT_IDS = 'persona_chat_ids';
 export const SETTING_DAY_INSIGHT_SYSTEM_PROMPT = 'day_insight_system_prompt';
 export const SETTING_DAY_INSIGHT_USER_PROMPT_TEMPLATE = 'day_insight_user_prompt_template';
+export const SETTING_TOP_MESSAGES_DEFAULT_AUTHOR = 'top_messages_default_author_from_id';
 
 export const DEFAULT_PERSONA_MODEL = 'gpt-4o-mini-2024-07-18';
 export const DEFAULT_PERSONA_MAX_TEXT_LEN = 500;
@@ -277,6 +278,17 @@ export async function getIngestMainChatSlug(): Promise<string> {
   if (rows.length === 0) return 'main';
   const v = rows[0].value?.trim();
   return v || 'main';
+}
+
+/** Default author (from_id) for the "top liked messages" table in Analytics. Null = no default filter. */
+export async function getTopMessagesDefaultAuthorFromId(): Promise<string | null> {
+  const { rows } = await pool.query<{ value: string }>(
+    'SELECT value FROM settings WHERE key = $1',
+    [SETTING_TOP_MESSAGES_DEFAULT_AUTHOR]
+  );
+  if (rows.length === 0) return null;
+  const v = rows[0].value?.trim();
+  return v || null;
 }
 
 /** Chats to include in persona context. Empty array or null = all chats. */

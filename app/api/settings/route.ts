@@ -21,6 +21,7 @@ import {
   SETTING_INGEST_MAIN_CHAT_SLUG,
   SETTING_DAY_INSIGHT_SYSTEM_PROMPT,
   SETTING_DAY_INSIGHT_USER_PROMPT_TEMPLATE,
+  SETTING_TOP_MESSAGES_DEFAULT_AUTHOR,
   DEFAULT_PERSONA_MODEL,
   DEFAULT_PERSONA_SYSTEM_PROMPT,
   DEFAULT_PERSONA_USER_PROMPT_TEMPLATE,
@@ -241,6 +242,18 @@ export async function POST(request: NextRequest) {
          ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
         [SETTING_DAY_INSIGHT_USER_PROMPT_TEMPLATE, v]
       );
+    }
+    const topMessagesDefaultAuthorFromId = body.top_messages_default_author_from_id as string | null | undefined;
+    if (topMessagesDefaultAuthorFromId !== undefined) {
+      if (topMessagesDefaultAuthorFromId === null || topMessagesDefaultAuthorFromId === '') {
+        await pool.query('DELETE FROM settings WHERE key = $1', [SETTING_TOP_MESSAGES_DEFAULT_AUTHOR]);
+      } else {
+        await pool.query(
+          `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
+           ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+          [SETTING_TOP_MESSAGES_DEFAULT_AUTHOR, String(topMessagesDefaultAuthorFromId)]
+        );
+      }
     }
 
     const data = await getSettingsData();

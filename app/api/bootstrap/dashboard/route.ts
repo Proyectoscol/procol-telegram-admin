@@ -3,6 +3,7 @@ import { log } from '@/lib/logger';
 import { getChatsData } from '@/lib/data/chats';
 import { getOverviewData } from '@/lib/data/overview';
 import { getUsersSummaryData } from '@/lib/data/users-summary';
+import { getTopMessagesDefaultAuthor } from '@/lib/data/top-messages';
 import { withConcurrencyLimit } from '@/lib/concurrency';
 import { parseChatIds } from '@/lib/api/chat-params';
 
@@ -45,7 +46,8 @@ export async function GET(request: NextRequest) {
       fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H4',location:'app/api/bootstrap/dashboard/route.ts:37',message:'bootstrap/dashboard usersSummary done',data:{rows:Array.isArray(usersSummary)?usersSummary.length:null},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       log.db(`[DBG-01a8b2 H4] ${runId} dashboard usersSummary done rows=${Array.isArray(usersSummary) ? usersSummary.length : 'na'}`);
-      return NextResponse.json({ chats, overview, usersSummary });
+      const topMessagesDefaultAuthor = await getTopMessagesDefaultAuthor();
+      return NextResponse.json({ chats, overview, usersSummary, topMessagesDefaultAuthor });
     } catch (err) {
       // #region agent log
       fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H2',location:'app/api/bootstrap/dashboard/route.ts:41',message:'bootstrap/dashboard error',data:{error:err instanceof Error ? err.message : 'unknown'},timestamp:Date.now()})}).catch(()=>{});
