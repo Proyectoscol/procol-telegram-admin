@@ -1,4 +1,4 @@
-import { ensureSchema, queryWithRetry } from '@/lib/db/client';
+import { queryWithRetry } from '@/lib/db/client';
 import { getTopMessagesDefaultAuthorFromId } from '@/lib/settings';
 
 // Safety cap on rows fetched per request — the UI paginates client-side (10 per page)
@@ -50,8 +50,6 @@ interface TopMessageParams {
  * message's own date is range-bound. Capped at MAX_MESSAGES_FETCHED; the client paginates.
  */
 export async function getTopLikedMessages({ chatIds, start, end, authorFromId }: TopMessageParams): Promise<TopMessage[]> {
-  await ensureSchema();
-
   const params: (string | number | number[])[] = [start, end];
   let chatCond = '';
   let authorCond = '';
@@ -144,8 +142,6 @@ export interface MessageDetail {
 
 /** Full detail for one message: reactions (who + emoji) and quotes (replies) — both all-time, not range-bound. */
 export async function getMessageDetail({ chatId, messageId }: { chatId: number; messageId: number }): Promise<MessageDetail | null> {
-  await ensureSchema();
-
   const { rows: msgRows } = await queryWithRetry<{
     chat_id: string;
     message_id: string;
