@@ -128,7 +128,7 @@ export function TopLikedMessages({
         setPage(1);
       })
       .catch((e) => { if (e?.name !== 'AbortError') setError(e.message); })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
     return () => ctrl.abort();
   }, [chatIds.join(','), start, end, authorFilter?.from_id]);
 
